@@ -45,11 +45,12 @@ def game_manager() -> Iterator[None]:
 
 
 class Bot:
-    def __init__(self, fen=None, depth=4, debug=False):
+    def __init__(self, fen=None, depth=4, use_square_scores=True, debug=False):
         self.board = chess.Board(
             fen if fen else "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
         )
         self.depth = depth
+        self.use_square_scores = use_square_scores
         self.debug = debug
         possible_paths = [
             "../../data/opening_book.txt",
@@ -101,8 +102,11 @@ class Bot:
             transition_table=self.transition_table,
             zobrist_numbers=self.zobrist_numbers,
             zobrist_hash=self.zobrist_hash,
+            use_square_scores=self.use_square_scores,
             debug_counts=self.debug,
         )
+        if move is None:
+            ...
         if update_zobrist_hash:
             self.zobrist_hash = evaluator.update_zobrist_hash(
                 self.zobrist_hash, self.board, move, self.zobrist_numbers

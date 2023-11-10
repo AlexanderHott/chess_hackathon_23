@@ -6,7 +6,7 @@ from grob import evaluator
 from tests.random_bot import RandomBot
 
 if __name__ == "__main__":
-    grob_bot = Bot(depth=5, debug=True)
+    grob_bot = Bot(fen="rnq2kr1/p6p/2p2Bp1/4Pp1b/2QP4/8/PP3P1P/R4RK1 b - - 0 1", depth=4, debug=True)
     random_bot = RandomBot()
     random_bot.board = grob_bot.board
 

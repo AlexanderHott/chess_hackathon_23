@@ -65,7 +65,7 @@ def generate_zobrist_numbers() -> list[int]:
     returns: a list of random integers to be used for Zobrist hashing
     """
     zobrist_numbers = []
-    for _ in range(64 * 12 + 4):
+    for _ in range(64 * 12 + 4 + 2):
         zobrist_numbers.append(random.getrandbits(64))
     return zobrist_numbers
 
@@ -105,6 +105,7 @@ def get_zobrist_hash(board: chess.Board, zobrist_numbers: list[int]) -> int:
             zobrist_hash ^= zobrist_numbers[64 * 12 + color]
         if board.has_queenside_castling_rights(color):
             zobrist_hash ^= zobrist_numbers[64 * 12 + 2 + color]
+    zobrist_hash ^= zobrist_numbers[64 * 12 + 4 + board.turn]
     return zobrist_hash
 
 
@@ -154,6 +155,9 @@ def update_zobrist_hash(
                 zobrist_hash ^= get_zobrist_number(chess.A8, chess.BLACK, chess.ROOK, zobrist_numbers)
                 zobrist_hash ^= get_zobrist_number(chess.D8, chess.BLACK, chess.ROOK, zobrist_numbers)
                 zobrist_hash ^= get_zobrist_castling(chess.BLACK, chess.QUEEN, zobrist_numbers)
+    # new turn
+    zobrist_hash ^= zobrist_numbers[64 * 12 + 4 + board.turn]
+    zobrist_hash ^= zobrist_numbers[64 * 12 + 4 + (not board.turn)]
     return zobrist_hash
 
 
@@ -405,6 +409,7 @@ def search(
         zobrist_hash: the current board's zobrist hash, if zobrist_numbers is not None
         opening_book: an opening book
         using_opening_book: whether the book is still being used
+        use_square_scores: whether to use square scores
         guess_move_order: whether to sort moves according to an initial guess evaluation
         search_captures: whether to search all captures after depth limit is reached
         search_checks: whether to search all checks after depth limit is reached
