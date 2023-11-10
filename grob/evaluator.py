@@ -3,16 +3,8 @@ from itertools import chain
 import chess
 import logging
 
-from grob import square_tables
-
-piece_values = {
-    chess.PAWN: 10,
-    chess.KNIGHT: 30,
-    chess.BISHOP: 31,
-    chess.ROOK: 50,
-    chess.QUEEN: 90,
-    chess.KING: 0,
-}
+from grob import parameters
+from grob.parameters import WHITE_PIECE_SQUARE_TABLES, BLACK_PIECE_SQUARE_TABLES, PIECE_VALUES
 
 INF = float("inf")
 
@@ -29,10 +21,10 @@ def reset_debug_vars():
 
 
 def get_piece_square_bonus(square: chess.Square, piece: chess.PieceType, color: chess.Color) -> int:
-    if color == chess.BLACK:
-        return square_tables.BLACK_PIECE_SQUARE_TABLES[piece][63 - square]
+    if color == chess.WHITE:
+        return WHITE_PIECE_SQUARE_TABLES[piece][square]
     else:
-        return square_tables.WHITE_PIECE_SQUARE_TABLES[piece][63 - square]
+        return BLACK_PIECE_SQUARE_TABLES[piece][square]
 
 
 def get_square_scores(board: chess.Board, color: chess.Color) -> int:
@@ -52,8 +44,8 @@ def material_score(board: chess.Board, color: chess.Color) -> int:
     Returns: the piece material score for a color
     """
     material_value = 0
-    for piece_type in piece_values:
-        material_value += board.pieces_mask(piece_type, color).bit_count() * piece_values[piece_type]
+    for piece_type in PIECE_VALUES:
+        material_value += board.pieces_mask(piece_type, color).bit_count() * PIECE_VALUES[piece_type]
     return material_value
 
 
@@ -61,9 +53,10 @@ def endgame_corner_king(board: chess.Board, color: chess.Color, my_material: flo
     """
     Returns: the proximity of kings in the board, used to corner the king in endgames
     """
-    endgame_weight = (32 - board.occupied.bit_count()) / 29
+    endgame_weight = (32 - board.occupied.bit_count()) * parameters.ENDGAME_WEIGHT_CONTROL
     evaluation = 0
-    if my_material > enemy_material + piece_values[chess.PAWN] * 2 and endgame_weight > 0.5:
+    if my_material > enemy_material + parameters.CORNER_KING_MATERIAL_DIFFERENCE_REQ and \
+            endgame_weight > parameters.CORNER_KING_ENDGAME_WEIGHT_REQ:
         # reward distance from center
         enemy = board.king(not color)
         assert enemy is not None
@@ -91,8 +84,8 @@ def evaluate(board: chess.Board) -> float:
     white_sum += (white_material := material_score(board, chess.WHITE))
     black_sum += (black_material := material_score(board, chess.BLACK))
 
-    white_sum += get_square_scores(board, chess.WHITE) / 10  # a bit arbitrary
-    black_sum += get_square_scores(board, chess.BLACK) / 10
+    white_sum += get_square_scores(board, chess.WHITE) * parameters.SQUARE_SCORE_WEIGHT
+    black_sum += get_square_scores(board, chess.BLACK) * parameters.SQUARE_SCORE_WEIGHT
 
     white_sum += endgame_corner_king(board, chess.WHITE, white_material, black_material)
     black_sum += endgame_corner_king(board, chess.BLACK, black_material, white_material)
@@ -113,18 +106,19 @@ def guess_move_evaluation(board: chess.Board, move: chess.Move) -> int:
 
     # prioritize easy captures
     if capture_piece_type is not None and move_piece_type is not None:
-        guess += 10 * piece_values[capture_piece_type] - piece_values[move_piece_type]
+        # smallest attacker, biggest capture
+        guess += 10 * PIECE_VALUES[capture_piece_type] - PIECE_VALUES[move_piece_type]
 
     # prioritize promotions
     if move.promotion is not None:
-        guess += piece_values[move.promotion]
+        guess += PIECE_VALUES[move.promotion]
 
     # prioritize avoiding pawns
     opposite_color = not board.turn
     attacking_pawns = board.attackers_mask(opposite_color, move.to_square) & \
         board.pieces_mask(chess.PAWN, opposite_color)
     if attacking_pawns != 0 and move_piece_type is not None:
-        guess -= piece_values[move_piece_type]
+        guess -= PIECE_VALUES[move_piece_type]
 
     return guess
 
@@ -231,19 +225,14 @@ def search(board: chess.Board, depth: int, alpha: float = -INF, beta: float = IN
     best_move = None
     for move in moves:
         board.push(move)
-        if str(move) == "e7e5" and depth == 4:
-            ...
         evaluation = -search(board, depth - 1, -beta, -alpha, levels_deep=levels_deep + 1,
                              guess_move_order=guess_move_order, search_captures=search_captures,
                              search_checks=search_checks, debug_counts=debug_counts)[0]
         board.pop()
-        if evaluation != 0:
-            logging.debug(f"Eval for {move}: {evaluation}")
+        logging.debug(f"Eval for {move}: {evaluation}")
         if evaluation >= beta != INF:
             return beta, None
         if evaluation > alpha:
             alpha = evaluation
             best_move = move
-    if depth == 5:
-        ...
     return alpha, best_move
