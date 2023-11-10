@@ -14,11 +14,31 @@ debug_search_count = 0
 debug_search_depth = 0
 
 
-def reset_debug_vars():
+def reset_debug_vars() -> None:
+    """
+    This resets the global debug variables
+    """
     global debug_search_count
     global debug_search_depth
     debug_search_count = 0
     debug_search_depth = 0
+
+
+def get_opening_book(book_file: str) -> dict[str | dict[str | int]]:
+    """
+    returns: an opening book dict, where a fen entry corresponds to a dict of moves and their corresponding weights
+    """
+    opening_book = {}
+    with open(book_file, "r") as lines:
+        fen = ""
+        for line in lines:
+            if line.startswith("pos "):  # a start of a position in the file
+                fen = line[4:-1]
+                opening_book[fen] = {}
+            else:
+                move, weight = line.split(" ")
+                opening_book[fen][move] = int(weight)
+    return opening_book
 
 
 def generate_zobrist_numbers() -> list[int]:
@@ -45,7 +65,8 @@ def get_zobrist_hash(board: chess.Board, zobrist_numbers: list[int]) -> int:
     zobrist_hash = 0
     for square in range(64):
         piece = board.piece_at(square)
-        zobrist_hash ^= get_zobrist_number(square, piece.color, piece.piece_type, zobrist_numbers)
+        if piece is not None:
+            zobrist_hash ^= get_zobrist_number(square, piece.color, piece.piece_type, zobrist_numbers)
     for color in chess.COLORS:
         if board.has_kingside_castling_rights(color):
             zobrist_hash ^= zobrist_numbers[64 * 12 + color]
@@ -71,6 +92,16 @@ def update_zobrist_hash(zobrist_hash: int, board: chess.Board, move: chess.Move,
     return zobrist_hash
 
 
+def material_score(board: chess.Board, color: chess.Color) -> int:
+    """
+    Returns: the piece material score for a color
+    """
+    material_value = 0
+    for piece_type in PIECE_VALUES:
+        material_value += board.pieces_mask(piece_type, color).bit_count() * PIECE_VALUES[piece_type]
+    return material_value
+
+
 def get_piece_square_bonus(square: chess.Square, piece: chess.PieceType, color: chess.Color) -> int:
     if color == chess.WHITE:
         return WHITE_PIECE_SQUARE_TABLES[piece][square]
@@ -90,16 +121,6 @@ def get_square_scores(board: chess.Board, color: chess.Color) -> int:
     return total_square_bonus
 
 
-def material_score(board: chess.Board, color: chess.Color) -> int:
-    """
-    Returns: the piece material score for a color
-    """
-    material_value = 0
-    for piece_type in PIECE_VALUES:
-        material_value += board.pieces_mask(piece_type, color).bit_count() * PIECE_VALUES[piece_type]
-    return material_value
-
-
 def endgame_corner_king(board: chess.Board, color: chess.Color, my_material: float, enemy_material: float) -> float:
     """
     Returns: the proximity of kings in the board, used to corner the king in endgames
@@ -110,7 +131,6 @@ def endgame_corner_king(board: chess.Board, color: chess.Color, my_material: flo
             endgame_weight > parameters.CORNER_KING_ENDGAME_WEIGHT_REQ:
         # reward distance from center
         enemy = board.king(not color)
-        assert enemy is not None
         enemy_rank, enemy_file = chess.square_rank(enemy), chess.square_file(enemy)
         file_distance = max(3 - enemy_file, enemy_file - 4)
         rank_distance = max(3 - enemy_rank, enemy_rank - 4)
@@ -118,7 +138,6 @@ def endgame_corner_king(board: chess.Board, color: chess.Color, my_material: flo
 
         # reward closer kings
         friendly = board.king(color)
-        assert friendly is not None
         friendly_rank, friendly_file = chess.square_rank(friendly), chess.square_file(friendly)
         distance = abs(friendly_rank - enemy_rank) + abs(friendly_file - enemy_file)
         evaluation += 14 - distance
@@ -238,6 +257,7 @@ def search_all_captures(board: chess.Board, alpha: float, beta: float, levels_de
 def search(board: chess.Board, depth: int, alpha: float = -INF, beta: float = INF, levels_deep: int = 0,
            transition_table: dict[int | tuple[int | float | int]] = None, zobrist_numbers: list[int] | None = None,
            zobrist_hash: int = 0,
+           opening_book: dict[str | dict[str | int]] = None, using_opening_book: bool = True,
            guess_move_order: bool = True, search_captures: bool = True, search_checks: bool = True,
            debug_counts: bool = False) -> tuple[float, chess.Move | None]:
     """
@@ -250,12 +270,24 @@ def search(board: chess.Board, depth: int, alpha: float = -INF, beta: float = IN
         transition_table: a table of already searched positions and their evaluations, using Zobrist hashing
         zobrist_numbers: random numbers to be used for Zobrist hashing, or none if hashing shouldn't be used
         zobrist_hash: the current board's zobrist hash, if zobrist_numbers is not None
+        opening_book: an opening book
+        using_opening_book: whether the book is still being used
         guess_move_order: whether to sort moves according to an initial guess evaluation
         search_captures: whether to search all captures after depth limit is reached
         search_checks: whether to search all checks after depth limit is reached
         debug_counts: whether to update global count variables
     Returns: the evaluation of the current position, along with the best move if the depth has not been reached
     """
+    if using_opening_book:
+        if opening_book is not None:
+            fen = board.fen()[:-4]
+            if fen in opening_book:
+                opening_moves: dict[str | int] = opening_book[fen]  # remove the moves portion
+                move = random.choices(list(opening_moves.keys()), list(opening_moves.values()))[0]
+                return INF, chess.Move.from_uci(move)
+        else:
+            using_opening_book = False
+
     if debug_counts:
         global debug_search_count
         global debug_search_depth
@@ -283,15 +315,19 @@ def search(board: chess.Board, depth: int, alpha: float = -INF, beta: float = IN
         moves = order_moves(board, moves)
     best_move = None
     for move in moves:
-        updated_hash = update_zobrist_hash(zobrist_hash, board, move, zobrist_numbers)
+        updated_hash = zobrist_hash
+        if zobrist_numbers is not None:
+            updated_hash = update_zobrist_hash(zobrist_hash, board, move, zobrist_numbers)
         board.push(move)
         evaluation = -search(board, depth - 1, -beta, -alpha, levels_deep=levels_deep + 1,
                              transition_table=transition_table, zobrist_numbers=zobrist_numbers,
                              zobrist_hash=updated_hash,
+                             opening_book=opening_book, using_opening_book=using_opening_book,
                              guess_move_order=guess_move_order, search_captures=search_captures,
-                             search_checks=search_checks, debug_counts=debug_counts)[0]
+                             search_checks=search_checks,
+                             debug_counts=debug_counts)[0]
         board.pop()
-        logging.debug(f"Eval for {move}: {evaluation}")
+        # logging.debug(f"Eval for {move}: {evaluation}")
         if evaluation >= beta != INF:
             return beta, None
         if evaluation > alpha:

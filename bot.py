@@ -17,6 +17,7 @@ official website or GitHub repository: https://github.com/EphraimJZimmerman/ches
 License:
 This code is open-source and released under the MIT License. See the LICENSE file for details.
 """
+import os
 
 import chess
 import time
@@ -48,6 +49,13 @@ class Bot:
         self.board = chess.Board(fen if fen else "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1")
         self.depth = depth
         self.debug = debug
+        possible_paths = ["../../data/opening_book.txt", "../data/opening_book.txt", "data/opening_book.txt"]
+        for path in possible_paths:
+            try:
+                self.opening_book = evaluator.get_opening_book(path)
+                break
+            except FileNotFoundError:
+                continue
         self.transition_table = dict()
         self.zobrist_numbers = evaluator.generate_zobrist_numbers()
         self.zobrist_hash = evaluator.get_zobrist_hash(self.board, self.zobrist_numbers)
@@ -78,14 +86,11 @@ class Bot:
         # Assume that you are playing an arbitrary game. This function, which is
         # the core "brain" of the bot, should return the next move in any circumstance.
 
-        _, move = evaluator.search(self.board, depth=self.depth,
+        _, move = evaluator.search(self.board, depth=self.depth, opening_book=self.opening_book,
                                    transition_table=self.transition_table, zobrist_numbers=self.zobrist_numbers,
                                    zobrist_hash=self.zobrist_hash, debug_counts=self.debug)
         if update_zobrist_hash:
             self.zobrist_hash = evaluator.update_zobrist_hash(self.zobrist_hash, self.board, move, self.zobrist_numbers)
-        # print("My move: " + move)
-        if move is None:
-            evaluator.search(self.board, depth=self.depth, debug_counts=self.debug)
         return str(move)
 
 

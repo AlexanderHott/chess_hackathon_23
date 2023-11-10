@@ -1,4 +1,3 @@
-import logging
 import chess
 
 from bot import Bot
@@ -19,15 +18,11 @@ if __name__ == "__main__":
         print(f"move: {move}, count: {evaluator.debug_search_count}, depth: {evaluator.debug_search_depth}")
         if grob_bot.board.is_game_over():
             break
-        print("---\n\n")
-        print(grob_bot.board)
 
         move = random_bot.next_move()
         grob_bot.board.push_san(move)
         if grob_bot.board.is_game_over():
             break
-        print("---\n\n")
-        print(grob_bot.board)
 
     print(f"Checkmate? {grob_bot.board.is_checkmate()} {'white' if grob_bot.board.turn == chess.BLACK else 'black' }")
     print(grob_bot.board)
