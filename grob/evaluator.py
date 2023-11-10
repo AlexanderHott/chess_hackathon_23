@@ -437,6 +437,13 @@ def search(
         debug_search_count += 1
         debug_search_depth = max(debug_search_depth, levels_deep)
 
+    moves = board.legal_moves
+    if moves.count() == 0:
+        if board.is_checkmate():
+            return -INF, None  # current player has lost
+        else:
+            return 0, None  # game is a draw
+
     if zobrist_numbers is not None and transition_table is not None and _use_transition_table:
         if zobrist_hash in transition_table:
             cached_depth, cached_eval = transition_table[zobrist_hash]
@@ -459,13 +466,6 @@ def search(
             )
         else:
             return evaluate(board, use_square_scores=use_square_scores), None
-
-    moves = board.legal_moves
-    if moves.count() == 0:
-        if board.is_checkmate():
-            return -INF, None  # current player has lost
-        else:
-            return 0, None  # game is a draw
 
     if guess_move_order:
         moves = order_moves(board, moves)
