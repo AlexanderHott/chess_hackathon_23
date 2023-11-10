@@ -3,7 +3,7 @@ from itertools import chain
 import chess
 import logging
 
-from line_profiler import profile
+from grob import square_tables
 
 piece_values = {
     chess.PAWN: 10,
@@ -16,137 +16,6 @@ piece_values = {
 
 INF = float("inf")
 
-WHITE_PIECE_SQUARE_TABLES: dict[chess.PieceType, list[int]] ={
-    chess.PAWN: [
-         0,  0,  0,  0,  0,  0,  0,  0,
-        50, 50, 50, 50, 50, 50, 50, 50,
-        10, 10, 20, 30, 30, 20, 10, 10,
-         5,  5, 10, 25, 25, 10,  5,  5,
-         0,  0,  0, 20, 20,  0,  0,  0,
-         5, -5,-10,  0,  0,-10, -5,  5,
-         5, 10, 10,-20,-20, 10, 10,  5,
-         0,  0,  0,  0,  0,  0,  0,  0
-    ],
-    chess.KNIGHT: [
-        -50,-40,-30,-30,-30,-30,-40,-50,
-        -40,-20,  0,  0,  0,  0,-20,-40,
-        -30,  0, 10, 15, 15, 10,  0,-30,
-        -30,  5, 15, 20, 20, 15,  5,-30,
-        -30,  0, 15, 20, 20, 15,  0,-30,
-        -30,  5, 10, 15, 15, 10,  5,-30,
-        -40,-20,  0,  5,  5,  0,-20,-40,
-        -50,-40,-30,-30,-30,-30,-40,-50,
-    ],
-    chess.BISHOP: [
-        -20,-10,-10,-10,-10,-10,-10,-20,
-        -10,  0,  0,  0,  0,  0,  0,-10,
-        -10,  0,  5, 10, 10,  5,  0,-10,
-        -10,  5,  5, 10, 10,  5,  5,-10,
-        -10,  0, 10, 10, 10, 10,  0,-10,
-        -10, 10, 10, 10, 10, 10, 10,-10,
-        -10,  5,  0,  0,  0,  0,  5,-10,
-        -20,-10,-10,-10,-10,-10,-10,-20,
-    ],
-    chess.ROOK: [
-          0,  0,  0,  0,  0,  0,  0,  0,
-          5, 10, 10, 10, 10, 10, 10,  5,
-         -5,  0,  0,  0,  0,  0,  0, -5,
-         -5,  0,  0,  0,  0,  0,  0, -5,
-         -5,  0,  0,  0,  0,  0,  0, -5,
-         -5,  0,  0,  0,  0,  0,  0, -5,
-         -5,  0,  0,  0,  0,  0,  0, -5,
-          0,  0,  0,  5,  5,  0,  0,  0
-    ],
-    chess.QUEEN: [
-        -20,-10,-10, -5, -5,-10,-10,-20,
-        -10,  0,  0,  0,  0,  0,  0,-10,
-        -10,  0,  5,  5,  5,  5,  0,-10,
-         -5,  0,  5,  5,  5,  5,  0, -5,
-          0,  0,  5,  5,  5,  5,  0, -5,
-        -10,  5,  5,  5,  5,  5,  0,-10,
-        -10,  0,  5,  0,  0,  0,  0,-10,
-        -20,-10,-10, -5, -5,-10,-10,-20
-    ],
-    chess.KING: [
-        -30,-40,-40,-50,-50,-40,-40,-30,
-        -30,-40,-40,-50,-50,-40,-40,-30,
-        -30,-40,-40,-50,-50,-40,-40,-30,
-        -30,-40,-40,-50,-50,-40,-40,-30,
-        -20,-30,-30,-40,-40,-30,-30,-20,
-        -10,-20,-20,-20,-20,-20,-20,-10,
-         20, 20,  0,  0,  0,  0, 20, 20,
-         20, 30, 10,  0,  0, 10, 30, 20
-    ]
-}
-
-BLACK_PIECE_SQUARE_TABLES: dict[chess.PieceType, list[int]] ={
-    chess.PAWN: [
-         0,  0,  0,  0,  0,  0,  0,  0,
-         5, 10, 10,-20,-20, 10, 10,  5,
-         5, -5,-10,  0,  0,-10, -5,  5,
-         0,  0,  0, 20, 20,  0,  0,  0,
-         5,  5, 10, 25, 25, 10,  5,  5,
-        10, 10, 20, 30, 30, 20, 10, 10,
-        50, 50, 50, 50, 50, 50, 50, 50,
-         0,  0,  0,  0,  0,  0,  0,  0,
-    ],
-    chess.KNIGHT: [
-        -50,-40,-30,-30,-30,-30,-40,-50,
-        -40,-20,  0,  5,  5,  0,-20,-40,
-        -30,  5, 10, 15, 15, 10,  5,-30,
-        -30,  0, 15, 20, 20, 15,  0,-30,
-        -30,  5, 15, 20, 20, 15,  5,-30,
-        -30,  0, 10, 15, 15, 10,  0,-30,
-        -40,-20,  0,  0,  0,  0,-20,-40,
-        -50,-40,-30,-30,-30,-30,-40,-50,
-    ],
-    chess.BISHOP: [
-        -20,-10,-10,-10,-10,-10,-10,-20,
-        -10,  5,  0,  0,  0,  0,  5,-10,
-        -10, 10, 10, 10, 10, 10, 10,-10,
-        -10,  0, 10, 10, 10, 10,  0,-10,
-            -10,  5,  5, 10, 10,  5,  5,-10,
-        -10,  0,  5, 10, 10,  5,  0,-10,
-        -10,  0,  0,  0,  0,  0,  0,-10,
-        -20,-10,-10,-10,-10,-10,-10,-20,
-    ],
-    chess.ROOK: [
-          0,  0,  0,  5,  5,  0,  0,  0,
-         -5,  0,  0,  0,  0,  0,  0, -5,
-         -5,  0,  0,  0,  0,  0,  0, -5,
-         -5,  0,  0,  0,  0,  0,  0, -5,
-         -5,  0,  0,  0,  0,  0,  0, -5,
-         -5,  0,  0,  0,  0,  0,  0, -5,
-          5, 10, 10, 10, 10, 10, 10,  5,
-          0,  0,  0,  0,  0,  0,  0,  0,
-    ],
-    chess.QUEEN: [
-        -20,-10,-10, -5, -5,-10,-10,-20,
-        -10,  0,  5,  0,  0,  0,  0,-10,
-        -10,  5,  5,  5,  5,  5,  0,-10,
-          0,  0,  5,  5,  5,  5,  0, -5,
-         -5,  0,  5,  5,  5,  5,  0, -5,
-        -10,  0,  5,  5,  5,  5,  0,-10,
-        -10,  0,  0,  0,  0,  0,  0,-10,
-        -20,-10,-10, -5, -5,-10,-10,-20,
-    ],
-    chess.KING: [
-         20, 30, 10,  0,  0, 10, 30, 20,
-         20, 20,  0,  0,  0,  0, 20, 20,
-        -10,-20,-20,-20,-20,-20,-20,-10,
-        -20,-30,-30,-40,-40,-30,-30,-20,
-        -30,-40,-40,-50,-50,-40,-40,-30,
-        -30,-40,-40,-50,-50,-40,-40,-30,
-        -30,-40,-40,-50,-50,-40,-40,-30,
-        -30,-40,-40,-50,-50,-40,-40,-30,
-    ]
-}
-
-def get_piece_square_bonus(square: chess.Square, piece: chess.PieceType, color: chess.Color) -> int:
-    if color == chess.BLACK:
-        return BLACK_PIECE_SQUARE_TABLES[piece][square]
-    
-    return WHITE_PIECE_SQUARE_TABLES[piece][square]
 
 debug_search_count = 0
 debug_search_depth = 0
@@ -159,15 +28,32 @@ def reset_debug_vars():
     debug_search_depth = 0
 
 
-def material_score(board: chess.Board, color: chess.Color) -> float:
+def get_piece_square_bonus(square: chess.Square, piece: chess.PieceType, color: chess.Color) -> int:
+    if color == chess.BLACK:
+        return square_tables.BLACK_PIECE_SQUARE_TABLES[piece][square]
+    else:
+        return square_tables.WHITE_PIECE_SQUARE_TABLES[piece][square]
+
+
+def get_square_scores(board: chess.Board, color: chess.Color) -> int:
+    """
+    Returns: the square bonus scores for each piece
+    """
+    total_square_bonus = 0
+    for piece_type in chess.PIECE_TYPES:
+        # is there a more efficient way of doing this using the bit mask directly?
+        for square in board.pieces(piece_type, color):
+            total_square_bonus += get_piece_square_bonus(square, piece_type, color)
+    return total_square_bonus
+
+
+def material_score(board: chess.Board, color: chess.Color) -> int:
     """
     Returns: the piece material score for a color
     """
     material_value = 0
     for piece_type in piece_values:
-        material_value += len(board.pieces(piece_type, color)) * piece_values[piece_type]
-        for square in board.pieces(piece_type, chess.WHITE):
-            material_value += get_piece_square_bonus(square, piece_type, color)
+        material_value += board.pieces_mask(piece_type, color).bit_count() * piece_values[piece_type]
     return material_value
 
 
@@ -204,6 +90,9 @@ def evaluate(board: chess.Board) -> float:
 
     white_sum += (white_material := material_score(board, chess.WHITE))
     black_sum += (black_material := material_score(board, chess.BLACK))
+
+    white_sum += get_square_scores(board, chess.WHITE) / 10  # a bit arbitrary
+    black_sum += get_square_scores(board, chess.BLACK) / 10
 
     white_sum += endgame_corner_king(board, chess.WHITE, white_material, black_material)
     black_sum += endgame_corner_king(board, chess.BLACK, black_material, white_material)
