@@ -1,3 +1,4 @@
+import random
 from itertools import chain
 
 import chess
@@ -18,6 +19,56 @@ def reset_debug_vars():
     global debug_search_depth
     debug_search_count = 0
     debug_search_depth = 0
+
+
+def generate_zobrist_numbers() -> list[int]:
+    """
+    returns: a list of random integers to be used for Zobrist hashing
+    """
+    zobrist_numbers = []
+    for _ in range(64 * 12 + 4):
+        zobrist_numbers.append(random.getrandbits(64))
+    return zobrist_numbers
+
+
+def get_zobrist_number(square: chess.Square, color: chess.Color, piece_type: chess.PieceType, zobrist_numbers: list[int]) -> int:
+    """
+    returns: the Zobrist number for a particular piece
+    """
+    return zobrist_numbers[square * 12 + color * 6 + piece_type]
+
+
+def get_zobrist_hash(board: chess.Board, zobrist_numbers: list[int]) -> int:
+    """
+    returns: the Zobrist hash for a board
+    """
+    zobrist_hash = 0
+    for square in range(64):
+        piece = board.piece_at(square)
+        zobrist_hash ^= get_zobrist_number(square, piece.color, piece.piece_type, zobrist_numbers)
+    for color in chess.COLORS:
+        if board.has_kingside_castling_rights(color):
+            zobrist_hash ^= zobrist_numbers[64 * 12 + color]
+        if board.has_queenside_castling_rights(color):
+            zobrist_hash ^= zobrist_numbers[64 * 12 + 2 + color]
+    return zobrist_hash
+
+
+def update_zobrist_hash(zobrist_hash: int, board: chess.Board, move: chess.Move, zobrist_numbers: list[int]) -> int:
+    """
+    returns: an updated Zobrist hash
+    TODO: add castling and en passant logic
+    """
+    from_piece = board.piece_at(move.from_square)
+    to_piece = board.piece_at(move.to_square)
+    zobrist_hash ^= get_zobrist_number(move.from_square, from_piece.color, from_piece.piece_type, zobrist_numbers)
+    if to_piece is not None:  # remove taken piece
+        zobrist_hash ^= get_zobrist_number(move.to_square, to_piece.color, to_piece.piece_type, zobrist_numbers)
+    if move.promotion is None:
+        zobrist_hash ^= get_zobrist_number(move.to_square, from_piece.color, from_piece.piece_type, zobrist_numbers)
+    else:
+        zobrist_hash ^= get_zobrist_number(move.to_square, from_piece.color, move.promotion, zobrist_numbers)
+    return zobrist_hash
 
 
 def get_piece_square_bonus(square: chess.Square, piece: chess.PieceType, color: chess.Color) -> int:
@@ -185,6 +236,8 @@ def search_all_captures(board: chess.Board, alpha: float, beta: float, levels_de
 
 
 def search(board: chess.Board, depth: int, alpha: float = -INF, beta: float = INF, levels_deep: int = 0,
+           transition_table: dict[int | tuple[int | float | int]] = None, zobrist_numbers: list[int] | None = None,
+           zobrist_hash: int = 0,
            guess_move_order: bool = True, search_captures: bool = True, search_checks: bool = True,
            debug_counts: bool = False) -> tuple[float, chess.Move | None]:
     """
@@ -194,6 +247,9 @@ def search(board: chess.Board, depth: int, alpha: float = -INF, beta: float = IN
         alpha: see alpha-beta pruning
         beta: see alpha-beta pruning
         levels_deep: how many levels deep the current function call is
+        transition_table: a table of already searched positions and their evaluations, using Zobrist hashing
+        zobrist_numbers: random numbers to be used for Zobrist hashing, or none if hashing shouldn't be used
+        zobrist_hash: the current board's zobrist hash, if zobrist_numbers is not None
         guess_move_order: whether to sort moves according to an initial guess evaluation
         search_captures: whether to search all captures after depth limit is reached
         search_checks: whether to search all checks after depth limit is reached
@@ -205,6 +261,9 @@ def search(board: chess.Board, depth: int, alpha: float = -INF, beta: float = IN
         global debug_search_depth
         debug_search_count += 1
         debug_search_depth = max(debug_search_depth, levels_deep)
+
+    if zobrist_numbers is not None:
+        ...
 
     if depth == 0:
         if search_captures:
@@ -224,8 +283,11 @@ def search(board: chess.Board, depth: int, alpha: float = -INF, beta: float = IN
         moves = order_moves(board, moves)
     best_move = None
     for move in moves:
+        updated_hash = update_zobrist_hash(zobrist_hash, board, move, zobrist_numbers)
         board.push(move)
         evaluation = -search(board, depth - 1, -beta, -alpha, levels_deep=levels_deep + 1,
+                             transition_table=transition_table, zobrist_numbers=zobrist_numbers,
+                             zobrist_hash=updated_hash,
                              guess_move_order=guess_move_order, search_captures=search_captures,
                              search_checks=search_checks, debug_counts=debug_counts)[0]
         board.pop()
