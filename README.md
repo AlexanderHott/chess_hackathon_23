@@ -3,6 +3,8 @@
 ## Features
 - Alpha-beta pruning w/ smart move ordering
 - "Quiescence" search
+- Transition tables
+- Positional piece bonuses
 - Smart endgame evaluation
 - Opening book
 
