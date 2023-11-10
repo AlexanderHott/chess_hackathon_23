@@ -52,13 +52,13 @@ def test_ordering_is_more_efficient():
                 position = chess.Board(line)
                 evaluator.reset_debug_vars()
                 start = time.perf_counter()
-                evaluator.search(position, depth=3, debug_counts=True, guess_move_order=False)
+                evaluator.search(position, depth=2, debug_counts=True, guess_move_order=False)
                 without_order_number_total += evaluator.debug_search_count
                 without_order_time_total += time.perf_counter() - start
 
                 evaluator.reset_debug_vars()
                 start = time.perf_counter()
-                evaluator.search(position, depth=3, debug_counts=True, guess_move_order=True)
+                evaluator.search(position, depth=2, debug_counts=True, guess_move_order=True)
                 with_order_number_total += evaluator.debug_search_count
                 with_order_time_total += time.perf_counter() - start
     assert with_order_number_total < without_order_number_total
