@@ -3,7 +3,6 @@ from itertools import chain
 from collections import OrderedDict
 
 import chess
-import logging
 
 from grob import parameters
 from grob.parameters import (
@@ -83,6 +82,13 @@ def get_zobrist_number(
     return zobrist_numbers[square * 12 + color * 6 + piece_type]
 
 
+def get_zobrist_castling(color: chess.Color, side: chess.PieceType, zobrist_numbers: list[int]):
+    """
+    returns: the Zobrist number representing a castle
+    """
+    return zobrist_numbers[64 * 12 + color * 2 + (side == chess.KING)]
+
+
 def get_zobrist_hash(board: chess.Board, zobrist_numbers: list[int]) -> int:
     """
     returns: the Zobrist hash for a board
@@ -107,25 +113,47 @@ def update_zobrist_hash(
 ) -> int:
     """
     returns: an updated Zobrist hash
-    TODO: add castling and en passant logic
     """
     from_piece = board.piece_at(move.from_square)
     to_piece = board.piece_at(move.to_square)
-    zobrist_hash ^= get_zobrist_number(
-        move.from_square, from_piece.color, from_piece.piece_type, zobrist_numbers
-    )
-    if to_piece is not None:  # remove taken piece
-        zobrist_hash ^= get_zobrist_number(
-            move.to_square, to_piece.color, to_piece.piece_type, zobrist_numbers
-        )
+    if from_piece is None:
+        raise ValueError("from_piece must not be None")
+    zobrist_hash ^= get_zobrist_number(move.from_square, from_piece.color, from_piece.piece_type, zobrist_numbers)
+    if to_piece is not None:
+        # remove taken piece
+        zobrist_hash ^= get_zobrist_number(move.to_square, to_piece.color, to_piece.piece_type, zobrist_numbers)
     if move.promotion is None:
-        zobrist_hash ^= get_zobrist_number(
-            move.to_square, from_piece.color, from_piece.piece_type, zobrist_numbers
-        )
+        # normal movement
+        zobrist_hash ^= get_zobrist_number(move.to_square, from_piece.color, from_piece.piece_type, zobrist_numbers)
     else:
-        zobrist_hash ^= get_zobrist_number(
-            move.to_square, from_piece.color, move.promotion, zobrist_numbers
-        )
+        # move promotion
+        zobrist_hash ^= get_zobrist_number(move.to_square, from_piece.color, move.promotion, zobrist_numbers)
+    if from_piece.piece_type == chess.PAWN and chess.square_file(move.from_square) != chess.square_file(move.to_square):
+        if from_piece.color == chess.WHITE:
+            # remove the en passanted pawn
+            zobrist_hash ^= get_zobrist_number(move.to_square - 8, chess.BLACK, chess.PAWN, zobrist_numbers)
+        elif from_piece.color == chess.BLACK:
+            zobrist_hash ^= get_zobrist_number(move.to_square + 8, chess.WHITE, chess.PAWN, zobrist_numbers)
+    # handle all the castling cases
+    if from_piece.piece_type == chess.KING:
+        if from_piece.color == chess.WHITE:
+            if move.from_square == chess.E1 and move.to_square == chess.G1:
+                zobrist_hash ^= get_zobrist_number(chess.H1, chess.WHITE, chess.ROOK, zobrist_numbers)
+                zobrist_hash ^= get_zobrist_number(chess.F1, chess.WHITE, chess.ROOK, zobrist_numbers)
+                zobrist_hash ^= get_zobrist_castling(chess.WHITE, chess.KING, zobrist_numbers)
+            elif move.from_square == chess.E1 and move.to_square == chess.C1:
+                zobrist_hash ^= get_zobrist_number(chess.A1, chess.WHITE, chess.ROOK, zobrist_numbers)
+                zobrist_hash ^= get_zobrist_number(chess.D1, chess.WHITE, chess.ROOK, zobrist_numbers)
+                zobrist_hash ^= get_zobrist_castling(chess.WHITE, chess.QUEEN, zobrist_numbers)
+        elif from_piece.color == chess.BLACK:
+            if move.from_square == chess.E8 and move.to_square == chess.G8:
+                zobrist_hash ^= get_zobrist_number(chess.H8, chess.BLACK, chess.ROOK, zobrist_numbers)
+                zobrist_hash ^= get_zobrist_number(chess.F8, chess.BLACK, chess.ROOK, zobrist_numbers)
+                zobrist_hash ^= get_zobrist_castling(chess.BLACK, chess.KING, zobrist_numbers)
+            elif move.from_square == chess.E8 and move.to_square == chess.C8:
+                zobrist_hash ^= get_zobrist_number(chess.A8, chess.BLACK, chess.ROOK, zobrist_numbers)
+                zobrist_hash ^= get_zobrist_number(chess.D8, chess.BLACK, chess.ROOK, zobrist_numbers)
+                zobrist_hash ^= get_zobrist_castling(chess.BLACK, chess.QUEEN, zobrist_numbers)
     return zobrist_hash
 
 
@@ -178,6 +206,8 @@ def endgame_corner_king(
     ):
         # reward distance from center
         enemy = board.king(not color)
+        if enemy is None:
+            raise ValueError("King is None")
         enemy_rank, enemy_file = chess.square_rank(enemy), chess.square_file(enemy)
         file_distance = max(3 - enemy_file, enemy_file - 4)
         rank_distance = max(3 - enemy_rank, enemy_rank - 4)
@@ -185,6 +215,8 @@ def endgame_corner_king(
 
         # reward closer kings
         friendly = board.king(color)
+        if friendly is None:
+            raise ValueError("King is None")
         friendly_rank, friendly_file = chess.square_rank(friendly), chess.square_file(
             friendly
         )
@@ -281,6 +313,8 @@ def search_all_captures(
     important_moves = capture_moves
     if search_checks:
         king = board.king(not board.turn)
+        if king is None:
+            raise ValueError("Board is invalid")
         # mask logic followed according to board.attacks_mask()
         pawn_check_moves = board.generate_legal_moves(
             board.pieces_mask(chess.PAWN, board.turn),
