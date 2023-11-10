@@ -22,22 +22,23 @@ import chess
 import requests
 import logging
 import random
+
 # DO NOT MODIFY
 
 
 def get_move(board: chess.Board, best_move=False) -> str:
     """
-        Gets a move for the current white piece.
+    Gets a move for the current white piece.
 
-        **Bot is not smart -- not intended to be used for training, only for testing
-        game logic.
+    **Bot is not smart -- not intended to be used for training, only for testing
+    game logic.
 
-        Args:
-            board (chess.Board): The entire chess board, which will be evaluated.
-            best_move (bool): If the bot should, when applicable, find the best move.
+    Args:
+        board (chess.Board): The entire chess board, which will be evaluated.
+        best_move (bool): If the bot should, when applicable, find the best move.
 
-        Returns:
-            str: The next move.
+    Returns:
+        str: The next move.
     """
 
     if not best_move:
@@ -49,7 +50,10 @@ def get_move(board: chess.Board, best_move=False) -> str:
             return move
     else:
         # This makes the bot slightly better. It will choose the best move, if applicable.
-        url = "https://www.chessdb.cn/cdb.php?action=querybest&board=" + board.fen().replace(" ", "%")
+        url = (
+            "https://www.chessdb.cn/cdb.php?action=querybest&board="
+            + board.fen().replace(" ", "%")
+        )
         try:
             if board.turn:
                 response = requests.get(url, timeout=10.0)
