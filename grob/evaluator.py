@@ -225,7 +225,7 @@ def endgame_corner_king(
     return evaluation * endgame_weight
 
 
-def evaluate(board: chess.Board) -> float:
+def evaluate(board: chess.Board, use_square_scores: bool = True) -> float:
     """
     Returns: board evaluation
     """
@@ -235,8 +235,9 @@ def evaluate(board: chess.Board) -> float:
     white_sum += (white_material := material_score(board, chess.WHITE))
     black_sum += (black_material := material_score(board, chess.BLACK))
 
-    white_sum += get_square_scores(board, chess.WHITE) * parameters.SQUARE_SCORE_WEIGHT
-    black_sum += get_square_scores(board, chess.BLACK) * parameters.SQUARE_SCORE_WEIGHT
+    if use_square_scores:
+        white_sum += get_square_scores(board, chess.WHITE) * parameters.SQUARE_SCORE_WEIGHT
+        black_sum += get_square_scores(board, chess.BLACK) * parameters.SQUARE_SCORE_WEIGHT
 
     white_sum += endgame_corner_king(board, chess.WHITE, white_material, black_material)
     black_sum += endgame_corner_king(board, chess.BLACK, black_material, white_material)
@@ -290,6 +291,7 @@ def search_all_captures(
     beta: float,
     levels_deep: int = 0,
     search_checks: bool = True,
+    use_square_scores: bool = True,
     debug_counts: bool = False,
 ) -> tuple[float, chess.Move | None]:
     """
@@ -301,7 +303,7 @@ def search_all_captures(
         debug_search_count += 1
         debug_search_depth = max(debug_search_depth, levels_deep)
 
-    evaluation = evaluate(board)
+    evaluation = evaluate(board, use_square_scores=use_square_scores)
     if evaluation >= beta:
         return beta, None
     alpha = max(alpha, evaluation)
@@ -385,6 +387,7 @@ def search(
     zobrist_hash: int = 0,
     opening_book: dict[str, dict[str, int]] | None = None,
     using_opening_book: bool = True,
+    use_square_scores: bool = True,
     guess_move_order: bool = True,
     search_captures: bool = True,
     search_checks: bool = True,
@@ -446,10 +449,11 @@ def search(
                 beta,
                 levels_deep=levels_deep,
                 search_checks=search_checks,
+                use_square_scores=use_square_scores,
                 debug_counts=debug_counts,
             )
         else:
-            return evaluate(board), None
+            return evaluate(board, use_square_scores=use_square_scores), None
 
     moves = board.legal_moves
     if moves.count() == 0:
@@ -479,6 +483,7 @@ def search(
             zobrist_hash=updated_hash,
             opening_book=opening_book,
             using_opening_book=using_opening_book,
+            use_square_scores=use_square_scores,
             guess_move_order=guess_move_order,
             search_captures=search_captures,
             search_checks=search_checks,
