@@ -30,9 +30,9 @@ def reset_debug_vars():
 
 def get_piece_square_bonus(square: chess.Square, piece: chess.PieceType, color: chess.Color) -> int:
     if color == chess.BLACK:
-        return square_tables.BLACK_PIECE_SQUARE_TABLES[piece][square]
+        return square_tables.BLACK_PIECE_SQUARE_TABLES[piece][63 - square]
     else:
-        return square_tables.WHITE_PIECE_SQUARE_TABLES[piece][square]
+        return square_tables.WHITE_PIECE_SQUARE_TABLES[piece][63 - square]
 
 
 def get_square_scores(board: chess.Board, color: chess.Color) -> int:
@@ -231,6 +231,8 @@ def search(board: chess.Board, depth: int, alpha: float = -INF, beta: float = IN
     best_move = None
     for move in moves:
         board.push(move)
+        if str(move) == "e7e5" and depth == 4:
+            ...
         evaluation = -search(board, depth - 1, -beta, -alpha, levels_deep=levels_deep + 1,
                              guess_move_order=guess_move_order, search_captures=search_captures,
                              search_checks=search_checks, debug_counts=debug_counts)[0]
@@ -242,4 +244,6 @@ def search(board: chess.Board, depth: int, alpha: float = -INF, beta: float = IN
         if evaluation > alpha:
             alpha = evaluation
             best_move = move
+    if depth == 5:
+        ...
     return alpha, best_move

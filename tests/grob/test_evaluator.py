@@ -113,7 +113,7 @@ def play_two_bots(new: bot.Bot, old: bot.Bot, number_games: int = 1, fen: str =c
 
 
 def test_grob_beats_random():
-    wins, draws, losses = play_two_bots(bot.Bot(), RandomBot(), number_games=1)
+    wins, draws, losses = play_two_bots(bot.Bot(depth=4), RandomBot(), number_games=1)
     assert wins == 1
 
 
@@ -128,5 +128,4 @@ def test_positional_piece_bonus():
     board.set_fen(good)
     good_bonus = evaluator.get_square_scores(board, chess.WHITE)
 
-    print(good_bonus, bad_bonus)
     assert good_bonus > bad_bonus
