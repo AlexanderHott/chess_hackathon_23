@@ -6,7 +6,7 @@
 - Transition tables
 - Positional piece bonuses
 - Smart endgame evaluation
-- Opening book (with Bongcloud Rapid Response Technology™)
+- Opening book (includes Bongcloud Rapid Response Technology™)
 
 ## Quickstart
 
