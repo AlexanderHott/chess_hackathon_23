@@ -451,14 +451,19 @@ def search(
             debug_counts=debug_counts,
             _use_transition_table=True,
         )[0]
-        if transition_table is not None and _use_transition_table:
-            transition_table[updated_hash] = (depth - 1, evaluation)
+        # if transition_table is not None and _use_transition_table:
+        #     transition_table[updated_hash] = (depth - 1, evaluation)
         board.pop()
         # logging.debug(f"Eval for {move}: {evaluation}")
         if evaluation >= beta != INF:
+            if transition_table is not None and _use_transition_table:
+                transition_table[zobrist_hash] = (depth, beta)
             return beta, None
         if evaluation > alpha:
             alpha = evaluation
             best_move = move
+
+    if transition_table is not None and _use_transition_table:
+        transition_table[zobrist_hash] = (depth, alpha)
 
     return alpha, best_move
