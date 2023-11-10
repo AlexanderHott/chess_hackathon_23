@@ -25,7 +25,7 @@ for i in range(150000):
 
     numPiecesInPos = sum(fen.lower().count(char) for char in "rnbq")
     if numPlyPlayed > plyToPlay + 20 * 2 and numPiecesInPos >= 10:
-        positions.append(game.headers['Opening'])
+        positions.append(game.headers["Opening"])
         positions.append(fen)
 
 with open("output.txt", "w") as file:

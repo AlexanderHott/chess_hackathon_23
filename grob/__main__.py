@@ -1,3 +1,5 @@
+import chess
+
 from bot import Bot
 from grob import evaluator
 
@@ -12,7 +14,11 @@ if __name__ == "__main__":
         evaluator.reset_debug_vars()
         move = grob_bot.next_move()
         grob_bot.board.push_san(move)
-        print(f"move: {move}, count: {evaluator.debug_search_count}, depth: {evaluator.debug_search_depth}")
+
+        print(
+            f"move: {move}, count: {evaluator.debug_search_count}, depth: {evaluator.debug_search_depth}, tt hits: {evaluator.debug_tt_cache_hits}"
+        )
+        print(f"{len(grob_bot.transition_table)=}")
         if grob_bot.board.is_game_over():
             break
 
@@ -21,4 +27,7 @@ if __name__ == "__main__":
         if grob_bot.board.is_game_over():
             break
 
-    print(f"Checkmate? {grob_bot.board.is_checkmate()}")
+    print(
+        f"Checkmate? {grob_bot.board.is_checkmate()} {'white' if grob_bot.board.turn == chess.BLACK else 'black' }"
+    )
+    print(grob_bot.board)

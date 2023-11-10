@@ -4,3 +4,4 @@ __pycache__/
 /.pytest_cache/
 /grob/.pytest_cache/
 /tests/grob/.pytest_cache/
+.idea/
