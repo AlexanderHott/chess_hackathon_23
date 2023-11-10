@@ -16,7 +16,7 @@ piece_values = {
 
 INF = float("inf")
 
-PIECE_SQUARE_TABLES: dict[chess.PieceType, list[int]] ={
+WHITE_PIECE_SQUARE_TABLES: dict[chess.PieceType, list[int]] ={
     chess.PAWN: [
          0,  0,  0,  0,  0,  0,  0,  0,
         50, 50, 50, 50, 50, 50, 50, 50,
@@ -79,11 +79,74 @@ PIECE_SQUARE_TABLES: dict[chess.PieceType, list[int]] ={
     ]
 }
 
+BLACK_PIECE_SQUARE_TABLES: dict[chess.PieceType, list[int]] ={
+    chess.PAWN: [
+         0,  0,  0,  0,  0,  0,  0,  0,
+         5, 10, 10,-20,-20, 10, 10,  5,
+         5, -5,-10,  0,  0,-10, -5,  5,
+         0,  0,  0, 20, 20,  0,  0,  0,
+         5,  5, 10, 25, 25, 10,  5,  5,
+        10, 10, 20, 30, 30, 20, 10, 10,
+        50, 50, 50, 50, 50, 50, 50, 50,
+         0,  0,  0,  0,  0,  0,  0,  0,
+    ],
+    chess.KNIGHT: [
+        -50,-40,-30,-30,-30,-30,-40,-50,
+        -40,-20,  0,  5,  5,  0,-20,-40,
+        -30,  5, 10, 15, 15, 10,  5,-30,
+        -30,  0, 15, 20, 20, 15,  0,-30,
+        -30,  5, 15, 20, 20, 15,  5,-30,
+        -30,  0, 10, 15, 15, 10,  0,-30,
+        -40,-20,  0,  0,  0,  0,-20,-40,
+        -50,-40,-30,-30,-30,-30,-40,-50,
+    ],
+    chess.BISHOP: [
+        -20,-10,-10,-10,-10,-10,-10,-20,
+        -10,  5,  0,  0,  0,  0,  5,-10,
+        -10, 10, 10, 10, 10, 10, 10,-10,
+        -10,  0, 10, 10, 10, 10,  0,-10,
+            -10,  5,  5, 10, 10,  5,  5,-10,
+        -10,  0,  5, 10, 10,  5,  0,-10,
+        -10,  0,  0,  0,  0,  0,  0,-10,
+        -20,-10,-10,-10,-10,-10,-10,-20,
+    ],
+    chess.ROOK: [
+          0,  0,  0,  5,  5,  0,  0,  0,
+         -5,  0,  0,  0,  0,  0,  0, -5,
+         -5,  0,  0,  0,  0,  0,  0, -5,
+         -5,  0,  0,  0,  0,  0,  0, -5,
+         -5,  0,  0,  0,  0,  0,  0, -5,
+         -5,  0,  0,  0,  0,  0,  0, -5,
+          5, 10, 10, 10, 10, 10, 10,  5,
+          0,  0,  0,  0,  0,  0,  0,  0,
+    ],
+    chess.QUEEN: [
+        -20,-10,-10, -5, -5,-10,-10,-20,
+        -10,  0,  5,  0,  0,  0,  0,-10,
+        -10,  5,  5,  5,  5,  5,  0,-10,
+          0,  0,  5,  5,  5,  5,  0, -5,
+         -5,  0,  5,  5,  5,  5,  0, -5,
+        -10,  0,  5,  5,  5,  5,  0,-10,
+        -10,  0,  0,  0,  0,  0,  0,-10,
+        -20,-10,-10, -5, -5,-10,-10,-20,
+    ],
+    chess.KING: [
+         20, 30, 10,  0,  0, 10, 30, 20,
+         20, 20,  0,  0,  0,  0, 20, 20,
+        -10,-20,-20,-20,-20,-20,-20,-10,
+        -20,-30,-30,-40,-40,-30,-30,-20,
+        -30,-40,-40,-50,-50,-40,-40,-30,
+        -30,-40,-40,-50,-50,-40,-40,-30,
+        -30,-40,-40,-50,-50,-40,-40,-30,
+        -30,-40,-40,-50,-50,-40,-40,-30,
+    ]
+}
+
 def get_piece_square_bonus(square: chess.Square, piece: chess.PieceType, color: chess.Color) -> int:
     if color == chess.BLACK:
-        return 0
+        return BLACK_PIECE_SQUARE_TABLES[piece][square]
     
-    return PIECE_SQUARE_TABLES[piece][square]
+    return WHITE_PIECE_SQUARE_TABLES[piece][square]
 
 debug_search_count = 0
 debug_search_depth = 0
@@ -117,6 +180,7 @@ def endgame_corner_king(board: chess.Board, color: chess.Color, my_material: flo
     if my_material > enemy_material + piece_values[chess.PAWN] * 2 and endgame_weight > 0.5:
         # reward distance from center
         enemy = board.king(not color)
+        assert enemy is not None
         enemy_rank, enemy_file = chess.square_rank(enemy), chess.square_file(enemy)
         file_distance = max(3 - enemy_file, enemy_file - 4)
         rank_distance = max(3 - enemy_rank, enemy_rank - 4)
@@ -124,6 +188,7 @@ def endgame_corner_king(board: chess.Board, color: chess.Color, my_material: flo
 
         # reward closer kings
         friendly = board.king(color)
+        assert friendly is not None
         friendly_rank, friendly_file = chess.square_rank(friendly), chess.square_file(friendly)
         distance = abs(friendly_rank - enemy_rank) + abs(friendly_file - enemy_file)
         evaluation += 14 - distance
@@ -149,7 +214,6 @@ def evaluate(board: chess.Board) -> float:
     return evaluation
 
 
-@profile
 def guess_move_evaluation(board: chess.Board, move: chess.Move) -> int:
     """
     Returns: guesses the evaluation of a move for move ordering
