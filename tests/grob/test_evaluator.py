@@ -116,6 +116,7 @@ def test_grob_beats_random():
     wins, draws, losses = play_two_bots(bot.Bot(), RandomBot(), number_games=1)
     assert wins == 1
 
+
 def test_positional_piece_bonus():
     bad = "N6N/8/8/8/8/8/8/N6N"
     good = "8/8/8/3NN3/3NN3/8/8/8"
@@ -123,9 +124,9 @@ def test_positional_piece_bonus():
     board = chess.Board()
     board.set_fen(bad)
 
-    bad_bonus = evaluator.material_score(board, chess.WHITE)
+    bad_bonus = evaluator.get_square_scores(board, chess.WHITE)
     board.set_fen(good)
-    good_bonus = evaluator.material_score(board, chess.WHITE)
+    good_bonus = evaluator.get_square_scores(board, chess.WHITE)
 
     print(good_bonus, bad_bonus)
     assert good_bonus > bad_bonus

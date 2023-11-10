@@ -230,8 +230,6 @@ def search(board: chess.Board, depth: int, alpha: float = -INF, beta: float = IN
         moves = order_moves(board, moves)
     best_move = None
     for move in moves:
-        if depth == 1 and str(move).startswith("f5e5") or str(move).startswith("f5e4"):
-            ...
         board.push(move)
         evaluation = -search(board, depth - 1, -beta, -alpha, levels_deep=levels_deep + 1,
                              guess_move_order=guess_move_order, search_captures=search_captures,
