@@ -1,5 +1,11 @@
 # The Legendary Grob Bot
 
+## Features
+- Alpha-beta pruning w/ smart move ordering
+- "Quiescence" search
+- Smart endgame evaluation
+- Opening book
+
 ## Quickstart
 
 ```
