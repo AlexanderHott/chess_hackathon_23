@@ -3,7 +3,7 @@
 ## Features
 - Alpha-beta pruning w/ smart move ordering
 - "Quiescence" search
-- Transition tables
+- Transposition tables
 - Positional piece bonuses
 - Smart endgame evaluation
 - Opening book (includes Bongcloud Rapid Response Technology™)
