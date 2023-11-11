@@ -5,3 +5,4 @@ __pycache__/
 /grob/.pytest_cache/
 /tests/grob/.pytest_cache/
 .idea/
+*.log

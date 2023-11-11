@@ -1,6 +1,8 @@
 import random
+from datetime import datetime
 from itertools import chain
 from collections import OrderedDict
+import logging
 
 import chess
 
@@ -10,6 +12,9 @@ from grob.parameters import (
     BLACK_PIECE_SQUARE_TABLES,
     PIECE_VALUES,
 )
+
+logging.basicConfig(filename=f"log/{datetime.now().strftime('%d-%m-%Y_%H-%M-%S')}.log", level=logging.INFO)
+eval_logger = logging.getLogger("eval")
 
 INF = float("inf")
 
@@ -436,6 +441,7 @@ def search(
                 if debug_counts:
                     global debug_tt_cache_hits
                     debug_tt_cache_hits += 1
+                eval_logger.info(f"Zob cache hit {zobrist_hash} with eval {cached_eval} at depth {depth}")
                 return cached_eval, None
 
     if depth == 0:
@@ -485,17 +491,21 @@ def search(
             debug_counts=debug_counts,
             _use_transition_table=True,
         )[0]
+        eval_logger.debug(f"{board.fen()} {evaluation}")
         board.pop()
         # logging.debug(f"Eval for {move}: {evaluation}")
         if evaluation >= beta != INF:
             if transition_table is not None and _use_transition_table:
                 transition_table[zobrist_hash] = (depth, beta)
+            eval_logger.info(f"Trimming {board.fen()} with eval {evaluation} with beta {beta}")
             return beta, None
         if evaluation > alpha:
             alpha = evaluation
             best_move = move
 
     if transition_table is not None and _use_transition_table:
+        eval_logger.debug(f"Setting zob hash {zobrist_hash} to eval {alpha} at depth {depth}")
         transition_table[zobrist_hash] = (depth, alpha)
 
+    eval_logger.info(f"Found best move {best_move} with alpha {alpha}")
     return alpha, best_move
