@@ -63,7 +63,7 @@ class Bot:
                 break
             except FileNotFoundError:
                 continue
-        self.transition_table = evaluator.TransitionTable(max_size=1_000_000)
+        self.transposition_table = evaluator.TranspositionTable(max_size=1_000_000)
         self.zobrist_numbers = evaluator.generate_zobrist_numbers()
         self.zobrist_hash = evaluator.get_zobrist_hash(self.board, self.zobrist_numbers)
 
@@ -99,7 +99,7 @@ class Bot:
             self.board,
             depth=self.depth,
             opening_book=self.opening_book,
-            transition_table=self.transition_table,
+            transposition_table=self.transposition_table,
             zobrist_numbers=self.zobrist_numbers,
             zobrist_hash=self.zobrist_hash,
             use_square_scores=self.use_square_scores,
@@ -111,6 +111,8 @@ class Bot:
             self.zobrist_hash = evaluator.update_zobrist_hash(
                 self.zobrist_hash, self.board, move, self.zobrist_numbers
             )
+            if self.zobrist_hash in self.transposition_table:
+                self.transposition_table.pop(self.zobrist_hash)  # prevents repetition glitches
         return str(move)
 
 

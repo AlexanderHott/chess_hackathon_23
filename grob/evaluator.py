@@ -14,7 +14,7 @@ from grob.parameters import (
 INF = float("inf")
 
 
-class TransitionTable(OrderedDict[int, tuple[int, float]]):
+class TranspositionTable(OrderedDict[int, tuple[int, float]]):
     def __init__(self, max_size=5, *args, **kwds):
         self.max_size = max_size
         super().__init__(*args, **kwds)
@@ -385,8 +385,8 @@ def search(
     alpha: float = -INF,
     beta: float = INF,
     levels_deep: int = 0,
-    transition_table: TransitionTable | None = None,
-    _use_transition_table: bool = False,
+    transposition_table: TranspositionTable | None = None,
+    _use_transposition_table: bool = False,
     zobrist_numbers: list[int] | None = None,
     zobrist_hash: int = 0,
     opening_book: dict[str, dict[str, int]] | None = None,
@@ -404,7 +404,7 @@ def search(
         alpha: see alpha-beta pruning
         beta: see alpha-beta pruning
         levels_deep: how many levels deep the current function call is
-        transition_table: a table of already searched positions and their evaluations, using Zobrist hashing
+        transposition_table: a table of already searched positions and their evaluations, using Zobrist hashing
         zobrist_numbers: random numbers to be used for Zobrist hashing, or none if hashing shouldn't be used
         zobrist_hash: the current board's zobrist hash, if zobrist_numbers is not None
         opening_book: an opening book
@@ -414,7 +414,7 @@ def search(
         search_captures: whether to search all captures after depth limit is reached
         search_checks: whether to search all checks after depth limit is reached
         debug_counts: whether to update global count variables
-        _use_transition_table: whether to use the transition_table. First search shouldn't
+        _use_transposition_table: whether to use the transposition_table. First search shouldn't
     Returns: the evaluation of the current position, along with the best move if the depth has not been reached
     """
     if using_opening_book:
@@ -437,22 +437,22 @@ def search(
         debug_search_count += 1
         debug_search_depth = max(debug_search_depth, levels_deep)
 
-    moves = board.legal_moves
-    if moves.count() == 0:
+    if board.is_game_over():
         if board.is_checkmate():
             return -INF, None  # current player has lost
         else:
             return 0, None  # game is a draw
 
-    if zobrist_numbers is not None and transition_table is not None and _use_transition_table:
-        if zobrist_hash in transition_table:
-            cached_depth, cached_eval = transition_table[zobrist_hash]
+    if zobrist_numbers is not None and transposition_table is not None and _use_transposition_table:
+        if zobrist_hash in transposition_table:
+            cached_depth, cached_eval = transposition_table[zobrist_hash]
             if depth <= cached_depth:
                 if debug_counts:
                     global debug_tt_cache_hits
                     debug_tt_cache_hits += 1
                 return cached_eval, None
 
+    moves = board.legal_moves
     if depth == 0:
         if search_captures:
             return search_all_captures(
@@ -483,7 +483,7 @@ def search(
             -beta,
             -alpha,
             levels_deep=levels_deep + 1,
-            transition_table=transition_table,
+            transposition_table=transposition_table,
             zobrist_numbers=zobrist_numbers,
             zobrist_hash=updated_hash,
             opening_book=opening_book,
@@ -493,19 +493,19 @@ def search(
             search_captures=search_captures,
             search_checks=search_checks,
             debug_counts=debug_counts,
-            _use_transition_table=True,
+            _use_transposition_table=True,
         )[0]
         board.pop()
         # logging.debug(f"Eval for {move}: {evaluation}")
         if evaluation >= beta != INF:
-            if transition_table is not None and _use_transition_table:
-                transition_table[zobrist_hash] = (depth, beta)
+            if transposition_table is not None and _use_transposition_table:
+                transposition_table[zobrist_hash] = (depth, beta)
             return beta, None
-        if evaluation > alpha:
+        if evaluation > alpha or evaluation == -INF:
             alpha = evaluation
             best_move = move
 
-    if transition_table is not None and _use_transition_table:
-        transition_table[zobrist_hash] = (depth, alpha)
+    if transposition_table is not None and _use_transposition_table:
+        transposition_table[zobrist_hash] = (depth, alpha)
 
     return alpha, best_move
