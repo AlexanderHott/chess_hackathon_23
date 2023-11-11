@@ -13,7 +13,7 @@ from grob.parameters import (
     PIECE_VALUES,
 )
 
-logging.basicConfig(filename=f"log/{datetime.now().strftime('%d-%m-%Y_%H-%M-%S')}.log", level=logging.INFO)
+logging.basicConfig(filename=f"log/{datetime.now().strftime('%d-%m-%Y_%H-%M-%S')}.log", level=logging.DEBUG)
 eval_logger = logging.getLogger("eval")
 
 INF = float("inf")
@@ -234,6 +234,9 @@ def evaluate(board: chess.Board) -> float:
     """
     Returns: board evaluation
     """
+    if board.is_repetition():
+        eval_logger.debug("Eval on draw")
+        return 0
     white_sum = 0
     black_sum = 0
 
@@ -357,6 +360,7 @@ def search_all_captures(
     important_moves = sorted(
         important_moves, key=lambda m: guess_move_evaluation(board, m), reverse=True
     )
+    eval_logger.debug(f"Checking {len(important_moves)} capture moves at depth {debug_search_depth}")
 
     best_move = None
     for move in important_moves:
@@ -418,12 +422,13 @@ def search(
         if opening_book is not None:
             fen = board.fen()[:-4]
             if fen in opening_book:
-                opening_moves: dict[str, int] = opening_book[
+                opening_moves = opening_book[
                     fen
                 ]  # remove the moves portion
                 move = random.choices(
                     list(opening_moves.keys()), list(opening_moves.values())
                 )[0]
+                eval_logger.info(f"Using book move {move}")
                 return INF, chess.Move.from_uci(move)
         else:
             using_opening_book = False
@@ -434,6 +439,7 @@ def search(
         debug_search_count += 1
         debug_search_depth = max(debug_search_depth, levels_deep)
 
+    # Zob hash
     if zobrist_numbers is not None and transition_table is not None and _use_transition_table:
         if zobrist_hash in transition_table:
             cached_depth, cached_eval = transition_table[zobrist_hash]
@@ -441,11 +447,12 @@ def search(
                 if debug_counts:
                     global debug_tt_cache_hits
                     debug_tt_cache_hits += 1
-                eval_logger.info(f"Zob cache hit {zobrist_hash} with eval {cached_eval} at depth {depth}")
+                eval_logger.debug(f"Zob cache hit {zobrist_hash} with eval {cached_eval} at depth {depth}")
                 return cached_eval, None
 
     if depth == 0:
         if search_captures:
+            eval_logger.debug("Reached depth 0, searching captures")
             return search_all_captures(
                 board,
                 alpha,
@@ -474,6 +481,7 @@ def search(
                 zobrist_hash, board, move, zobrist_numbers
             )
         board.push(move)
+        board_fen = board.fen()
         evaluation = -search(
             board,
             depth - 1,
@@ -497,7 +505,7 @@ def search(
         if evaluation >= beta != INF:
             if transition_table is not None and _use_transition_table:
                 transition_table[zobrist_hash] = (depth, beta)
-            eval_logger.info(f"Trimming {board.fen()} with eval {evaluation} with beta {beta}")
+            eval_logger.debug(f"Trimming {board_fen} with eval {evaluation} with beta {beta}")
             return beta, None
         if evaluation > alpha:
             alpha = evaluation
@@ -507,5 +515,5 @@ def search(
         eval_logger.debug(f"Setting zob hash {zobrist_hash} to eval {alpha} at depth {depth}")
         transition_table[zobrist_hash] = (depth, alpha)
 
-    eval_logger.info(f"Found best move {best_move} with alpha {alpha}")
+    eval_logger.info(f"Found best move {best_move} for '{board.fen()}' with alpha {alpha}")
     return alpha, best_move

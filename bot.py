@@ -17,15 +17,20 @@ official website or GitHub repository: https://github.com/EphraimJZimmerman/ches
 License:
 This code is open-source and released under the MIT License. See the LICENSE file for details.
 """
-import os
-
-import chess
+import logging
+import random
 import time
 from collections.abc import Iterator
 from contextlib import contextmanager
+from datetime import datetime
+
+import chess
 
 from grob import evaluator
 import test_bot
+
+# logging.basicConfig(filename=f"log/{datetime.now().strftime('%d-%m-%Y_%H-%M-%S')}.log", level=logging.DEBUG)
+move_logger = logging.getLogger("move")
 
 
 @contextmanager
@@ -103,10 +108,20 @@ class Bot:
             zobrist_hash=self.zobrist_hash,
             debug_counts=self.debug,
         )
-        if update_zobrist_hash:
-            self.zobrist_hash = evaluator.update_zobrist_hash(
-                self.zobrist_hash, self.board, move, self.zobrist_numbers
-            )
+        # delete the move once we make it bc we don't want repitition draws
+        if self.zobrist_hash in self.transition_table:
+            logging.info(f"Removing zob hash {move}")
+            # del self.transition_table[self.zobrist_hash]
+        # if for whatever reason we didn't return a move, pick a random one instead of "None"
+        if move is None:
+            logging.warn("Move was None, using random move")
+            move = random.choice(list(self.board.legal_moves))
+        else:
+            if update_zobrist_hash:
+                self.zobrist_hash = evaluator.update_zobrist_hash(
+                    self.zobrist_hash, self.board, move, self.zobrist_numbers
+                )
+        move_logger.info(f"Made move {move}")
         return str(move)
 
 
