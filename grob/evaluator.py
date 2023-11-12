@@ -2,6 +2,7 @@ import datetime
 import itertools
 import logging
 import random
+import time
 from itertools import chain
 from collections import OrderedDict
 
@@ -14,21 +15,18 @@ from grob.parameters import (
     PIECE_VALUES,
 )
 
-zlogger = logging.getLogger("zlogger")
-logging.basicConfig(filename=f"{datetime.datetime.now().strftime('%H%M%S')}.log", level=logging.INFO)
-
 INF = float("inf")
 
 TableEntryType = int
 TABLE_ENTRY_TYPE = [EXACT, LOWER_BOUND, UPPER_BOUND] = range(3)
 
 
-class TranspositionTable(OrderedDict[tuple[int, ...], tuple[int, float, TableEntryType]]):
+class TranspositionTable(OrderedDict[tuple[int, ...], tuple[int | None, float, TableEntryType]]):
     def __init__(self, max_size=5, *args, **kwargs):
         self.max_size = max_size
         super().__init__(*args, **kwargs)
 
-    def __setitem__(self, key: tuple[int, ...], value: tuple[int, float, TableEntryType]):
+    def __setitem__(self, key: tuple[int, ...], value: tuple[int | None, float, TableEntryType]):
         if key not in self:
             if len(self) == self.max_size:
                 self.popitem(last=False)
@@ -37,7 +35,9 @@ class TranspositionTable(OrderedDict[tuple[int, ...], tuple[int, float, TableEnt
 
 def get_representation_tuple(board: chess.Board):
     return (*(board.pieces_mask(p_type, color)
-              for p_type, color in itertools.product(chess.PIECE_TYPES, chess.COLORS)), board.turn)
+              for p_type, color in itertools.product(chess.PIECE_TYPES, chess.COLORS)), board.turn,
+            board.has_kingside_castling_rights(chess.WHITE), board.has_kingside_castling_rights(chess.BLACK),
+            board.has_queenside_castling_rights(chess.WHITE), board.has_queenside_castling_rights(chess.BLACK))
 
 
 def is_entry_applicable(cached_eval: float, alpha: float, beta: float, entry_type: TableEntryType) -> bool:
@@ -202,12 +202,12 @@ def guess_move_evaluation(board: chess.Board, move: chess.Move) -> int:
 
 
 def order_moves(
-    board: chess.Board, moves: chess.LegalMoveGenerator
+    board: chess.Board, moves: chess.LegalMoveGenerator, priority_move: chess.Move | None = None
 ) -> list[chess.Move]:
     """
     Returns: sorts a list of moves in place according to guess_move_evaluation
     """
-    return sorted(moves, key=lambda m: guess_move_evaluation(board, m), reverse=True)
+    return sorted(moves, key=lambda m: INF if priority_move == m else guess_move_evaluation(board, m), reverse=True)
 
 
 def search_all_captures(
@@ -215,6 +215,7 @@ def search_all_captures(
     alpha: float,
     beta: float,
     levels_deep: int = 0,
+    transposition_table: TranspositionTable | None = None,
     search_checks: bool = True,
     use_square_scores: bool = True,
     debug_counts: bool = False,
@@ -226,10 +227,23 @@ def search_all_captures(
         global debug_search_count
         global debug_search_depth
         debug_search_count += 1
-        debug_search_depth = max(debug_search_depth, levels_deep)
+        # debug_search_depth = max(debug_search_depth, levels_deep)
+
+    tuple_representation = None
+    if transposition_table is not None:
+        tuple_representation = get_representation_tuple(board)
+        if tuple_representation in transposition_table:
+            cached_depth, cached_eval, entry_type = transposition_table[tuple_representation]
+            if cached_depth is None and is_entry_applicable(cached_eval, alpha, beta, entry_type):
+                if debug_counts:
+                    global debug_tt_cache_hits
+                    debug_tt_cache_hits += 1
+                return cached_eval, None
 
     evaluation = evaluate(board, use_square_scores=use_square_scores)
     if evaluation >= beta:
+        if transposition_table is not None:
+            transposition_table[tuple_representation] = (None, beta, LOWER_BOUND)
         return beta, None
     alpha = max(alpha, evaluation)
 
@@ -293,10 +307,15 @@ def search_all_captures(
         )[0]
         board.pop()
         if evaluation >= beta:
+            if transposition_table is not None:
+                transposition_table[tuple_representation] = (None, beta, LOWER_BOUND)
             return beta, None
         if evaluation > alpha:  # must not be >=
             alpha = evaluation
             best_move = move
+
+    if transposition_table is not None:
+        transposition_table[tuple_representation] = (None, alpha, UPPER_BOUND if best_move is None else EXACT)
     return alpha, best_move
 
 
@@ -309,6 +328,8 @@ def search(
     transposition_table: TranspositionTable | None = None,
     _use_transposition_table: bool = False,
     opening_book: dict[str, dict[str, int]] | None = None,
+    end_time: float | None = None,
+    priority_move: chess.Move | None = None,
     using_opening_book: bool = True,
     use_square_scores: bool = True,
     guess_move_order: bool = True,
@@ -325,6 +346,8 @@ def search(
         levels_deep: how many levels deep the current function call is
         transposition_table: a table of already searched positions and their evaluations
         opening_book: an opening book
+        end_time: the time to break at
+        priority_move: best move of previous search iteration
         using_opening_book: whether the book is still being used
         use_square_scores: whether to use square scores
         guess_move_order: whether to sort moves according to an initial guess evaluation
@@ -334,13 +357,15 @@ def search(
         _use_transposition_table: whether to use the transposition_table. First search shouldn't
     Returns: the evaluation of the current position, along with the best move if the depth has not been reached
     """
+    if end_time is not None and time.time() > end_time:
+        raise TimeoutError("Out of time!")
+
     if using_opening_book:
         if opening_book is not None:
             fen = board.fen()[:-4]
             if fen in opening_book:
-                opening_moves: dict[str, int] = opening_book[
-                    fen
-                ]  # remove the moves portion
+                # remove the moves portion
+                opening_moves: dict[str, int] = opening_book[fen]
                 move = random.choices(
                     list(opening_moves.keys()), list(opening_moves.values())
                 )[0]
@@ -365,7 +390,8 @@ def search(
         tuple_representation = get_representation_tuple(board)
         if tuple_representation in transposition_table:
             cached_depth, cached_eval, entry_type = transposition_table[tuple_representation]
-            if depth <= cached_depth and is_entry_applicable(cached_eval, alpha, beta, entry_type):
+            if cached_depth is not None and depth <= cached_depth and \
+                    is_entry_applicable(cached_eval, alpha, beta, entry_type):
                 if debug_counts:
                     global debug_tt_cache_hits
                     debug_tt_cache_hits += 1
@@ -378,37 +404,46 @@ def search(
                 alpha,
                 beta,
                 levels_deep=levels_deep,
+                transposition_table=transposition_table,
                 search_checks=search_checks,
                 use_square_scores=use_square_scores,
                 debug_counts=debug_counts,
             )
         else:
             instant_evaluation = evaluate(board, use_square_scores=use_square_scores)
+            if transposition_table is not None:
+                transposition_table[tuple_representation] = (depth, instant_evaluation, EXACT)
             return instant_evaluation, None
 
     moves = board.legal_moves
     if guess_move_order:
-        moves = order_moves(board, moves)
+        moves = order_moves(board, moves, priority_move=priority_move)
     best_move = None
     _debug_move_evals = {}
     for move in moves:
         board.push(move)
-        evaluation = -search(
-            board,
-            depth - 1,
-            -beta,
-            -alpha,
-            levels_deep=levels_deep + 1,
-            transposition_table=transposition_table,
-            opening_book=opening_book,
-            using_opening_book=using_opening_book,
-            use_square_scores=use_square_scores,
-            guess_move_order=guess_move_order,
-            search_captures=search_captures,
-            search_checks=search_checks,
-            debug_counts=debug_counts,
-            _use_transposition_table=True,
-        )[0]
+        try:
+            evaluation = -search(
+                board,
+                depth - 1,
+                -beta,
+                -alpha,
+                levels_deep=levels_deep + 1,
+                transposition_table=transposition_table,
+                opening_book=opening_book,
+                end_time=end_time,
+                priority_move=priority_move,
+                using_opening_book=using_opening_book,
+                use_square_scores=use_square_scores,
+                guess_move_order=guess_move_order,
+                search_captures=search_captures,
+                search_checks=search_checks,
+                debug_counts=debug_counts,
+                _use_transposition_table=True,
+            )[0]
+        except TimeoutError:
+            board.pop()
+            raise TimeoutError("Ran out of time!")
         board.pop()
         _debug_move_evals[move] = evaluation
         # logging.debug(f"Eval for {move}: {evaluation}")
@@ -422,3 +457,24 @@ def search(
     if transposition_table is not None:
         transposition_table[tuple_representation] = (depth, alpha, UPPER_BOUND if best_move is None else EXACT)
     return alpha, best_move
+
+
+def iterative_deepening_search(board: chess.Board, search_time: float,
+                               transposition_table: TranspositionTable | None = None,
+                               opening_book: dict[str, dict[str, int]] | None = None,
+                               debug_counts: bool = False) -> tuple[float, chess.Move | None]:
+    end_time = time.time() + search_time
+    best_eval, best_move = -INF, None
+    try:
+        iterative_depth = 1
+        while True:
+            best_eval, best_move = search(board, iterative_depth, transposition_table=transposition_table,
+                                          opening_book=opening_book, end_time=end_time, priority_move=best_move,
+                                          debug_counts=debug_counts)
+            iterative_depth += 1
+    except TimeoutError as _:
+        pass
+    if best_move is None:
+        best_eval, best_move = search(board, depth=1, transposition_table=transposition_table,
+                                      opening_book=opening_book, debug_counts=debug_counts)
+    return best_eval, best_move

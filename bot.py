@@ -18,6 +18,7 @@ License:
 This code is open-source and released under the MIT License. See the LICENSE file for details.
 """
 import os
+import random
 
 import chess
 import time
@@ -45,11 +46,11 @@ def game_manager() -> Iterator[None]:
 
 
 class Bot:
-    def __init__(self, fen=None, depth=4, use_square_scores=True, debug=False):
+    def __init__(self, fen=None, time_per_turn=1, use_square_scores=True, debug=False):
         self.board = chess.Board(
             fen if fen else "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
         )
-        self.depth = depth
+        self.time_per_turn = time_per_turn
         self.use_square_scores = use_square_scores
         self.debug = debug
         possible_paths = [
@@ -93,12 +94,11 @@ class Bot:
         # Assume that you are playing an arbitrary game. This function, which is
         # the core "brain" of the bot, should return the next move in any circumstance.
 
-        _, move = evaluator.search(
+        _, move = evaluator.iterative_deepening_search(
             self.board,
-            depth=self.depth,
+            search_time=self.time_per_turn,
             opening_book=self.opening_book,
             transposition_table=self.transposition_table,
-            use_square_scores=self.use_square_scores,
             debug_counts=self.debug,
         )
         if self.transposition_table is not None:
