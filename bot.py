@@ -18,6 +18,7 @@ License:
 This code is open-source and released under the MIT License. See the LICENSE file for details.
 """
 import os
+import random
 
 import chess
 import time
@@ -45,11 +46,11 @@ def game_manager() -> Iterator[None]:
 
 
 class Bot:
-    def __init__(self, fen=None, depth=4, use_square_scores=True, debug=False):
+    def __init__(self, fen=None, time_per_turn=1, use_square_scores=True, debug=False):
         self.board = chess.Board(
             fen if fen else "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
         )
-        self.depth = depth
+        self.time_per_turn = time_per_turn
         self.use_square_scores = use_square_scores
         self.debug = debug
         possible_paths = [
@@ -64,8 +65,6 @@ class Bot:
             except FileNotFoundError:
                 continue
         self.transposition_table = evaluator.TranspositionTable(max_size=1_000_000)
-        self.zobrist_numbers = evaluator.generate_zobrist_numbers()
-        self.zobrist_hash = [(evaluator.get_zobrist_hash(self.board, self.zobrist_numbers), "")]
 
     def check_move_is_legal(self, initial_position, new_position) -> bool:
         """
@@ -84,7 +83,7 @@ class Bot:
             in self.board.legal_moves
         )
 
-    def next_move(self, update_zobrist_hash: bool = True) -> str:
+    def next_move(self) -> str:
         """
         The main call and response loop for playing a game of chess.
 
@@ -95,22 +94,18 @@ class Bot:
         # Assume that you are playing an arbitrary game. This function, which is
         # the core "brain" of the bot, should return the next move in any circumstance.
 
-        _, move = evaluator.search(
+        _, move = evaluator.iterative_deepening_search(
             self.board,
-            depth=self.depth,
+            search_time=self.time_per_turn,
             opening_book=self.opening_book,
             transposition_table=self.transposition_table,
-            zobrist_numbers=self.zobrist_numbers,
-            zobrist_hash=self.zobrist_hash,
-            use_square_scores=self.use_square_scores,
             debug_counts=self.debug,
         )
-        if update_zobrist_hash and self.zobrist_numbers is not None:
-            self.zobrist_hash.append((evaluator.update_zobrist_hash(
-                self.zobrist_hash[-1][0], self.board, move, self.zobrist_numbers
-            ), str(move)))
-            if self.zobrist_hash[-1] in self.transposition_table:
-                self.transposition_table.pop(self.zobrist_hash[-1][0])  # prevents repetition glitches
+        if self.transposition_table is not None:
+            self.board.push(move)
+            if (tup := evaluator.get_representation_tuple(self.board)) in self.transposition_table:
+                self.transposition_table.pop(tup)  # prevents repetition glitches
+            self.board.pop()
         return str(move)
 
 
