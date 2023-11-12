@@ -1,12 +1,22 @@
 # The Legendary Grob Bot
 
 ## Features
-- Alpha-beta pruning w/ smart move ordering
-- "Quiescence" search
-- Transposition tables
-- Positional piece bonuses
-- Smart endgame evaluation
-- Opening book (includes Bongcloud Rapid Response Technology™)
+
+### Minimax Search
+
+### Alpha-beta pruning
+
+### Move ordering
+
+### "Quiescence" search
+
+### Transposition tables
+
+### Positional piece bonus
+es
+### Smart endgame evaluation
+
+### Opening book (includes Bongcloud Rapid Response Technology™)
 
 ## Quickstart
 
