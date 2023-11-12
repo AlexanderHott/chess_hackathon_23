@@ -13,17 +13,28 @@ from grob.parameters import (
 
 INF = float("inf")
 
+TableEntryType = int
+TABLE_ENTRY_TYPE = [EXACT, LOWER_BOUND, UPPER_BOUND] = range(3)
 
-class TranspositionTable(OrderedDict[int, tuple[int, float]]):
-    def __init__(self, max_size=5, *args, **kwds):
+
+class TranspositionTable(OrderedDict[int, tuple[int, float, TableEntryType]]):
+    def __init__(self, max_size=5, *args, **kwargs):
         self.max_size = max_size
-        super().__init__(*args, **kwds)
+        super().__init__(*args, **kwargs)
 
-    def __setitem__(self, key: int, value: tuple[int, float]):
+    def __setitem__(self, key: int, value: tuple[int, float, TableEntryType]):
         if key not in self:
             if len(self) == self.max_size:
                 self.popitem(last=False)
         super().__setitem__(key, value)
+
+
+def is_entry_applicable(cached_eval: float, alpha: float, beta: float, entry_type: TableEntryType) -> bool:
+    """
+    returns: whether a stored entry can be used, given the current alpha-beta context
+    """
+    return entry_type == EXACT or (entry_type == UPPER_BOUND and cached_eval <= alpha) or \
+        (entry_type == LOWER_BOUND and cached_eval >= beta)
 
 
 debug_search_count = 0
@@ -437,20 +448,20 @@ def search(
         debug_search_count += 1
         debug_search_depth = max(debug_search_depth, levels_deep)
 
+    if zobrist_numbers is not None and _use_transposition_table:
+        if zobrist_hash in transposition_table:
+            cached_depth, cached_eval, entry_type = transposition_table[zobrist_hash]
+            if depth <= cached_depth and is_entry_applicable(cached_eval, alpha, beta, entry_type):
+                if debug_counts:
+                    global debug_tt_cache_hits
+                    debug_tt_cache_hits += 1
+                return cached_eval, None
+
     if board.is_game_over():
         if board.is_checkmate():
             return -INF, None  # current player has lost
         else:
             return 0, None  # game is a draw
-
-    if zobrist_numbers is not None and _use_transposition_table:
-        if zobrist_hash in transposition_table:
-            cached_depth, cached_eval = transposition_table[zobrist_hash]
-            if depth <= cached_depth:
-                if debug_counts:
-                    global debug_tt_cache_hits
-                    debug_tt_cache_hits += 1
-                return cached_eval, None
 
     if depth == 0:
         if search_captures:
@@ -464,7 +475,8 @@ def search(
                 debug_counts=debug_counts,
             )
         else:
-            return evaluate(board, use_square_scores=use_square_scores), None
+            instant_evaluation = evaluate(board, use_square_scores=use_square_scores)
+            return instant_evaluation, None
 
     moves = board.legal_moves
     if guess_move_order:
@@ -497,12 +509,13 @@ def search(
         )[0]
         board.pop()
         # logging.debug(f"Eval for {move}: {evaluation}")
-        if evaluation >= beta != INF:
-            return beta, None  # pruning, do not save evaluation to TT
+        if evaluation >= beta != INF:  # prune the tree
+            transposition_table[zobrist_hash] = (depth, beta, LOWER_BOUND)
+            return beta, None
         if evaluation > alpha or evaluation == -INF:
             alpha = evaluation
             best_move = move
 
     if zobrist_numbers is not None:
-        transposition_table[zobrist_hash] = (depth, alpha)
+        transposition_table[zobrist_hash] = (depth, alpha, UPPER_BOUND if best_move is None else EXACT)
     return alpha, best_move
