@@ -155,17 +155,3 @@ def test_positional_piece_bonus():
     good_bonus = evaluator.get_square_scores(board, chess.WHITE)
 
     assert good_bonus > bad_bonus
-
-
-def test_strange_zobrist():
-    board = chess.Board("r1bq1rk1/ppp1ppbp/2np1np1/8/3P1B2/4PN1P/PPP1BPP1/RN1Q1RK1 b - - 2 7")
-    numbers = evaluator.generate_zobrist_numbers()
-    zhash = evaluator.get_zobrist_hash(board, numbers)
-    moves = ["f6d7", "b1c3", "e7e5"]
-    # moves = ["f6d7", "b1c3", "e7e5", "f4g5", "g7f6", "c3e4", "f6g7"]
-    print()
-    for move in moves:
-        print(zhash)
-        zhash = evaluator.update_zobrist_hash(zhash, board, board.parse_san(move), numbers)
-        board.push_san(move)
-    print(zhash)
