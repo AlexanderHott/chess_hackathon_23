@@ -443,7 +443,7 @@ def search(
         else:
             return 0, None  # game is a draw
 
-    if zobrist_numbers is not None and transposition_table is not None and _use_transposition_table:
+    if zobrist_numbers is not None and _use_transposition_table:
         if zobrist_hash in transposition_table:
             cached_depth, cached_eval = transposition_table[zobrist_hash]
             if depth <= cached_depth:
@@ -452,7 +452,6 @@ def search(
                     debug_tt_cache_hits += 1
                 return cached_eval, None
 
-    moves = board.legal_moves
     if depth == 0:
         if search_captures:
             return search_all_captures(
@@ -467,6 +466,7 @@ def search(
         else:
             return evaluate(board, use_square_scores=use_square_scores), None
 
+    moves = board.legal_moves
     if guess_move_order:
         moves = order_moves(board, moves)
     best_move = None
@@ -498,14 +498,11 @@ def search(
         board.pop()
         # logging.debug(f"Eval for {move}: {evaluation}")
         if evaluation >= beta != INF:
-            if transposition_table is not None and _use_transposition_table:
-                transposition_table[zobrist_hash] = (depth, beta)
-            return beta, None
+            return beta, None  # pruning, do not save evaluation to TT
         if evaluation > alpha or evaluation == -INF:
             alpha = evaluation
             best_move = move
 
-    if transposition_table is not None and _use_transposition_table:
+    if zobrist_numbers is not None:
         transposition_table[zobrist_hash] = (depth, alpha)
-
     return alpha, best_move

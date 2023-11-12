@@ -105,9 +105,7 @@ class Bot:
             use_square_scores=self.use_square_scores,
             debug_counts=self.debug,
         )
-        if move is None:
-            ...
-        if update_zobrist_hash:
+        if update_zobrist_hash and self.zobrist_numbers is not None:
             self.zobrist_hash = evaluator.update_zobrist_hash(
                 self.zobrist_hash, self.board, move, self.zobrist_numbers
             )
