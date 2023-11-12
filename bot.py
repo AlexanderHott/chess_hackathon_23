@@ -65,7 +65,7 @@ class Bot:
                 continue
         self.transposition_table = evaluator.TranspositionTable(max_size=1_000_000)
         self.zobrist_numbers = evaluator.generate_zobrist_numbers()
-        self.zobrist_hash = evaluator.get_zobrist_hash(self.board, self.zobrist_numbers)
+        self.zobrist_hash = [(evaluator.get_zobrist_hash(self.board, self.zobrist_numbers), "")]
 
     def check_move_is_legal(self, initial_position, new_position) -> bool:
         """
@@ -106,11 +106,11 @@ class Bot:
             debug_counts=self.debug,
         )
         if update_zobrist_hash and self.zobrist_numbers is not None:
-            self.zobrist_hash = evaluator.update_zobrist_hash(
-                self.zobrist_hash, self.board, move, self.zobrist_numbers
-            )
-            if self.zobrist_hash in self.transposition_table:
-                self.transposition_table.pop(self.zobrist_hash)  # prevents repetition glitches
+            self.zobrist_hash.append((evaluator.update_zobrist_hash(
+                self.zobrist_hash[-1][0], self.board, move, self.zobrist_numbers
+            ), str(move)))
+            if self.zobrist_hash[-1] in self.transposition_table:
+                self.transposition_table.pop(self.zobrist_hash[-1][0])  # prevents repetition glitches
         return str(move)
 
 

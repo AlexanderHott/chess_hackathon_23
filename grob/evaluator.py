@@ -1,3 +1,5 @@
+import datetime
+import logging
 import random
 from itertools import chain
 from collections import OrderedDict
@@ -10,6 +12,9 @@ from grob.parameters import (
     BLACK_PIECE_SQUARE_TABLES,
     PIECE_VALUES,
 )
+
+zlogger = logging.getLogger("zlogger")
+logging.basicConfig(filename=f"{datetime.datetime.now().strftime('%H%M%S')}.log", level=logging.INFO)
 
 INF = float("inf")
 
@@ -76,6 +81,7 @@ def generate_zobrist_numbers() -> list[int]:
     returns: a list of random integers to be used for Zobrist hashing
     """
     zobrist_numbers = []
+    random.seed(22232)
     for _ in range(64 * 12 + 4 + 2):
         zobrist_numbers.append(random.getrandbits(64))
     return zobrist_numbers
@@ -113,9 +119,9 @@ def get_zobrist_hash(board: chess.Board, zobrist_numbers: list[int]) -> int:
             )
     for color in chess.COLORS:
         if board.has_kingside_castling_rights(color):
-            zobrist_hash ^= zobrist_numbers[64 * 12 + color]
+            zobrist_hash ^= get_zobrist_castling(color, chess.KING, zobrist_numbers)
         if board.has_queenside_castling_rights(color):
-            zobrist_hash ^= zobrist_numbers[64 * 12 + 2 + color]
+            zobrist_hash ^= get_zobrist_castling(color, chess.QUEEN, zobrist_numbers)
     zobrist_hash ^= zobrist_numbers[64 * 12 + 4 + board.turn]
     return zobrist_hash
 
@@ -153,18 +159,22 @@ def update_zobrist_hash(
                 zobrist_hash ^= get_zobrist_number(chess.H1, chess.WHITE, chess.ROOK, zobrist_numbers)
                 zobrist_hash ^= get_zobrist_number(chess.F1, chess.WHITE, chess.ROOK, zobrist_numbers)
                 zobrist_hash ^= get_zobrist_castling(chess.WHITE, chess.KING, zobrist_numbers)
+                zobrist_hash ^= get_zobrist_castling(chess.WHITE, chess.QUEEN, zobrist_numbers)
             elif move.from_square == chess.E1 and move.to_square == chess.C1:
                 zobrist_hash ^= get_zobrist_number(chess.A1, chess.WHITE, chess.ROOK, zobrist_numbers)
                 zobrist_hash ^= get_zobrist_number(chess.D1, chess.WHITE, chess.ROOK, zobrist_numbers)
+                zobrist_hash ^= get_zobrist_castling(chess.WHITE, chess.KING, zobrist_numbers)
                 zobrist_hash ^= get_zobrist_castling(chess.WHITE, chess.QUEEN, zobrist_numbers)
         elif from_piece.color == chess.BLACK:
             if move.from_square == chess.E8 and move.to_square == chess.G8:
                 zobrist_hash ^= get_zobrist_number(chess.H8, chess.BLACK, chess.ROOK, zobrist_numbers)
                 zobrist_hash ^= get_zobrist_number(chess.F8, chess.BLACK, chess.ROOK, zobrist_numbers)
                 zobrist_hash ^= get_zobrist_castling(chess.BLACK, chess.KING, zobrist_numbers)
+                zobrist_hash ^= get_zobrist_castling(chess.BLACK, chess.QUEEN, zobrist_numbers)
             elif move.from_square == chess.E8 and move.to_square == chess.C8:
                 zobrist_hash ^= get_zobrist_number(chess.A8, chess.BLACK, chess.ROOK, zobrist_numbers)
                 zobrist_hash ^= get_zobrist_number(chess.D8, chess.BLACK, chess.ROOK, zobrist_numbers)
+                zobrist_hash ^= get_zobrist_castling(chess.BLACK, chess.KING, zobrist_numbers)
                 zobrist_hash ^= get_zobrist_castling(chess.BLACK, chess.QUEEN, zobrist_numbers)
     # new turn
     zobrist_hash ^= zobrist_numbers[64 * 12 + 4 + board.turn]
@@ -399,7 +409,7 @@ def search(
     transposition_table: TranspositionTable | None = None,
     _use_transposition_table: bool = False,
     zobrist_numbers: list[int] | None = None,
-    zobrist_hash: int = 0,
+    zobrist_hash: list[tuple[int, str]] = None,
     opening_book: dict[str, dict[str, int]] | None = None,
     using_opening_book: bool = True,
     use_square_scores: bool = True,
@@ -428,6 +438,7 @@ def search(
         _use_transposition_table: whether to use the transposition_table. First search shouldn't
     Returns: the evaluation of the current position, along with the best move if the depth has not been reached
     """
+    zlogger.info(f"{depth} '{board.fen()}' ({zobrist_hash}) {board.move_stack}")
     if using_opening_book:
         if opening_book is not None:
             fen = board.fen()[:-4]
@@ -449,8 +460,8 @@ def search(
         debug_search_depth = max(debug_search_depth, levels_deep)
 
     if zobrist_numbers is not None and _use_transposition_table:
-        if zobrist_hash in transposition_table:
-            cached_depth, cached_eval, entry_type = transposition_table[zobrist_hash]
+        if zobrist_hash[-1] in transposition_table:
+            cached_depth, cached_eval, entry_type = transposition_table[zobrist_hash[-1][0]]
             if depth <= cached_depth and is_entry_applicable(cached_eval, alpha, beta, entry_type):
                 if debug_counts:
                     global debug_tt_cache_hits
@@ -482,12 +493,18 @@ def search(
     if guess_move_order:
         moves = order_moves(board, moves)
     best_move = None
+    _debug_move_evals = {}
     for move in moves:
         updated_hash = zobrist_hash
         if zobrist_numbers is not None:
-            updated_hash = update_zobrist_hash(
-                zobrist_hash, board, move, zobrist_numbers
+            updated_hash = zobrist_hash[:]
+            updated_hash.append(
+                (update_zobrist_hash(
+                    zobrist_hash[-1][0], board, move, zobrist_numbers
+                ), str(move))
             )
+            if updated_hash[-1][0] == 16288242624343831739:
+                ...
         board.push(move)
         evaluation = -search(
             board,
@@ -508,14 +525,15 @@ def search(
             _use_transposition_table=True,
         )[0]
         board.pop()
+        _debug_move_evals[move] = evaluation
         # logging.debug(f"Eval for {move}: {evaluation}")
         if evaluation >= beta != INF:  # prune the tree
-            transposition_table[zobrist_hash] = (depth, beta, LOWER_BOUND)
+            transposition_table[zobrist_hash[-1][0]] = (depth, beta, LOWER_BOUND)
             return beta, None
         if evaluation > alpha or evaluation == -INF:
             alpha = evaluation
             best_move = move
 
     if zobrist_numbers is not None:
-        transposition_table[zobrist_hash] = (depth, alpha, UPPER_BOUND if best_move is None else EXACT)
+        transposition_table[zobrist_hash[-1][0]] = (depth, alpha, UPPER_BOUND if best_move is None else EXACT)
     return alpha, best_move
