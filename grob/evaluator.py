@@ -1,6 +1,8 @@
 import datetime
+import itertools
 import logging
 import random
+import time
 from itertools import chain
 from collections import OrderedDict
 
@@ -10,28 +12,33 @@ from grob import parameters
 from grob.parameters import (
     WHITE_PIECE_SQUARE_TABLES,
     BLACK_PIECE_SQUARE_TABLES,
-    PIECE_VALUES,
+    PIECE_VALUES, ENDGAME_WHITE_PIECE_SQUARE_TABLES, ENDGAME_BLACK_PIECE_SQUARE_TABLES,
 )
 
-zlogger = logging.getLogger("zlogger")
-logging.basicConfig(filename=f"{datetime.datetime.now().strftime('%H%M%S')}.log", level=logging.INFO)
-
-INF = float("inf")
+# INF = float("inf")
+INF = 99_999_999
 
 TableEntryType = int
 TABLE_ENTRY_TYPE = [EXACT, LOWER_BOUND, UPPER_BOUND] = range(3)
 
 
-class TranspositionTable(OrderedDict[int, tuple[int, float, TableEntryType]]):
+class TranspositionTable(OrderedDict[tuple[int, ...], tuple[int | None, float, TableEntryType]]):
     def __init__(self, max_size=5, *args, **kwargs):
         self.max_size = max_size
         super().__init__(*args, **kwargs)
 
-    def __setitem__(self, key: int, value: tuple[int, float, TableEntryType]):
+    def __setitem__(self, key: tuple[int, ...], value: tuple[int | None, float, TableEntryType]):
         if key not in self:
             if len(self) == self.max_size:
                 self.popitem(last=False)
         super().__setitem__(key, value)
+
+
+def get_representation_tuple(board: chess.Board):
+    return (*(board.pieces_mask(p_type, color)
+              for p_type, color in itertools.product(chess.PIECE_TYPES, chess.COLORS)), board.turn,
+            board.has_kingside_castling_rights(chess.WHITE), board.has_kingside_castling_rights(chess.BLACK),
+            board.has_queenside_castling_rights(chess.WHITE), board.has_queenside_castling_rights(chess.BLACK))
 
 
 def is_entry_applicable(cached_eval: float, alpha: float, beta: float, entry_type: TableEntryType) -> bool:
@@ -76,112 +83,6 @@ def get_opening_book(book_file: str) -> dict[str, dict[str, int]]:
     return opening_book
 
 
-def generate_zobrist_numbers() -> list[int]:
-    """
-    returns: a list of random integers to be used for Zobrist hashing
-    """
-    zobrist_numbers = []
-    random.seed(22232)
-    for _ in range(64 * 12 + 4 + 2):
-        zobrist_numbers.append(random.getrandbits(64))
-    return zobrist_numbers
-
-
-def get_zobrist_number(
-    square: chess.Square,
-    color: chess.Color,
-    piece_type: chess.PieceType,
-    zobrist_numbers: list[int],
-) -> int:
-    """
-    returns: the Zobrist number for a particular piece
-    """
-    return zobrist_numbers[square * 12 + color * 6 + piece_type]
-
-
-def get_zobrist_castling(color: chess.Color, side: chess.PieceType, zobrist_numbers: list[int]):
-    """
-    returns: the Zobrist number representing a castle
-    """
-    return zobrist_numbers[64 * 12 + color * 2 + (side == chess.KING)]
-
-
-def get_zobrist_hash(board: chess.Board, zobrist_numbers: list[int]) -> int:
-    """
-    returns: the Zobrist hash for a board
-    """
-    zobrist_hash = 0
-    for square in range(64):
-        piece = board.piece_at(square)
-        if piece is not None:
-            zobrist_hash ^= get_zobrist_number(
-                square, piece.color, piece.piece_type, zobrist_numbers
-            )
-    for color in chess.COLORS:
-        if board.has_kingside_castling_rights(color):
-            zobrist_hash ^= get_zobrist_castling(color, chess.KING, zobrist_numbers)
-        if board.has_queenside_castling_rights(color):
-            zobrist_hash ^= get_zobrist_castling(color, chess.QUEEN, zobrist_numbers)
-    zobrist_hash ^= zobrist_numbers[64 * 12 + 4 + board.turn]
-    return zobrist_hash
-
-
-def update_zobrist_hash(
-    zobrist_hash: int, board: chess.Board, move: chess.Move, zobrist_numbers: list[int]
-) -> int:
-    """
-    returns: an updated Zobrist hash
-    """
-    from_piece = board.piece_at(move.from_square)
-    to_piece = board.piece_at(move.to_square)
-    if from_piece is None:
-        raise ValueError("from_piece must not be None")
-    zobrist_hash ^= get_zobrist_number(move.from_square, from_piece.color, from_piece.piece_type, zobrist_numbers)
-    if to_piece is not None:
-        # remove taken piece
-        zobrist_hash ^= get_zobrist_number(move.to_square, to_piece.color, to_piece.piece_type, zobrist_numbers)
-    if move.promotion is None:
-        # normal movement
-        zobrist_hash ^= get_zobrist_number(move.to_square, from_piece.color, from_piece.piece_type, zobrist_numbers)
-    else:
-        # move promotion
-        zobrist_hash ^= get_zobrist_number(move.to_square, from_piece.color, move.promotion, zobrist_numbers)
-    if from_piece.piece_type == chess.PAWN and chess.square_file(move.from_square) != chess.square_file(move.to_square):
-        if from_piece.color == chess.WHITE:
-            # remove the en passanted pawn
-            zobrist_hash ^= get_zobrist_number(move.to_square - 8, chess.BLACK, chess.PAWN, zobrist_numbers)
-        elif from_piece.color == chess.BLACK:
-            zobrist_hash ^= get_zobrist_number(move.to_square + 8, chess.WHITE, chess.PAWN, zobrist_numbers)
-    # handle all the castling cases
-    if from_piece.piece_type == chess.KING:
-        if from_piece.color == chess.WHITE:
-            if move.from_square == chess.E1 and move.to_square == chess.G1:
-                zobrist_hash ^= get_zobrist_number(chess.H1, chess.WHITE, chess.ROOK, zobrist_numbers)
-                zobrist_hash ^= get_zobrist_number(chess.F1, chess.WHITE, chess.ROOK, zobrist_numbers)
-                zobrist_hash ^= get_zobrist_castling(chess.WHITE, chess.KING, zobrist_numbers)
-                zobrist_hash ^= get_zobrist_castling(chess.WHITE, chess.QUEEN, zobrist_numbers)
-            elif move.from_square == chess.E1 and move.to_square == chess.C1:
-                zobrist_hash ^= get_zobrist_number(chess.A1, chess.WHITE, chess.ROOK, zobrist_numbers)
-                zobrist_hash ^= get_zobrist_number(chess.D1, chess.WHITE, chess.ROOK, zobrist_numbers)
-                zobrist_hash ^= get_zobrist_castling(chess.WHITE, chess.KING, zobrist_numbers)
-                zobrist_hash ^= get_zobrist_castling(chess.WHITE, chess.QUEEN, zobrist_numbers)
-        elif from_piece.color == chess.BLACK:
-            if move.from_square == chess.E8 and move.to_square == chess.G8:
-                zobrist_hash ^= get_zobrist_number(chess.H8, chess.BLACK, chess.ROOK, zobrist_numbers)
-                zobrist_hash ^= get_zobrist_number(chess.F8, chess.BLACK, chess.ROOK, zobrist_numbers)
-                zobrist_hash ^= get_zobrist_castling(chess.BLACK, chess.KING, zobrist_numbers)
-                zobrist_hash ^= get_zobrist_castling(chess.BLACK, chess.QUEEN, zobrist_numbers)
-            elif move.from_square == chess.E8 and move.to_square == chess.C8:
-                zobrist_hash ^= get_zobrist_number(chess.A8, chess.BLACK, chess.ROOK, zobrist_numbers)
-                zobrist_hash ^= get_zobrist_number(chess.D8, chess.BLACK, chess.ROOK, zobrist_numbers)
-                zobrist_hash ^= get_zobrist_castling(chess.BLACK, chess.KING, zobrist_numbers)
-                zobrist_hash ^= get_zobrist_castling(chess.BLACK, chess.QUEEN, zobrist_numbers)
-    # new turn
-    zobrist_hash ^= zobrist_numbers[64 * 12 + 4 + board.turn]
-    zobrist_hash ^= zobrist_numbers[64 * 12 + 4 + (not board.turn)]
-    return zobrist_hash
-
-
 def material_score(board: chess.Board, color: chess.Color) -> int:
     """
     Returns: the piece material score for a color
@@ -195,12 +96,12 @@ def material_score(board: chess.Board, color: chess.Color) -> int:
 
 
 def get_piece_square_bonus(
-    square: chess.Square, piece: chess.PieceType, color: chess.Color
+    square: chess.Square, piece: chess.PieceType, color: chess.Color, endgame: bool = False
 ) -> int:
     if color == chess.WHITE:
-        return WHITE_PIECE_SQUARE_TABLES[piece][square]
+        return ENDGAME_WHITE_PIECE_SQUARE_TABLES[piece][square] if endgame else WHITE_PIECE_SQUARE_TABLES[piece][square]
     else:
-        return BLACK_PIECE_SQUARE_TABLES[piece][square]
+        return ENDGAME_BLACK_PIECE_SQUARE_TABLES[piece][square] if endgame else BLACK_PIECE_SQUARE_TABLES[piece][square]
 
 
 def get_square_scores(board: chess.Board, color: chess.Color) -> int:
@@ -211,7 +112,12 @@ def get_square_scores(board: chess.Board, color: chess.Color) -> int:
     for piece_type in chess.PIECE_TYPES:
         # is there a more efficient way of doing this using the bit mask directly?
         for square in board.pieces(piece_type, color):
-            total_square_bonus += get_piece_square_bonus(square, piece_type, color)
+            if piece_type == chess.KING or piece_type == chess.PAWN:
+                endgame_weight = (32 - board.occupied.bit_count()) * parameters.ENDGAME_WEIGHT_CONTROL
+                total_square_bonus += (1 - endgame_weight) * get_piece_square_bonus(square, piece_type, color) + \
+                    endgame_weight * get_piece_square_bonus(square, piece_type, color, endgame=True)
+            else:
+                total_square_bonus += get_piece_square_bonus(square, piece_type, color)
     return total_square_bonus
 
 
@@ -264,8 +170,8 @@ def evaluate(board: chess.Board, use_square_scores: bool = True) -> float:
         white_sum += get_square_scores(board, chess.WHITE) * parameters.SQUARE_SCORE_WEIGHT
         black_sum += get_square_scores(board, chess.BLACK) * parameters.SQUARE_SCORE_WEIGHT
 
-    white_sum += endgame_corner_king(board, chess.WHITE, white_material, black_material)
-    black_sum += endgame_corner_king(board, chess.BLACK, black_material, white_material)
+    white_sum += endgame_corner_king(board, chess.WHITE, white_material, black_material) * parameters.ENDGAME_KING_PUSH_WEIGHT
+    black_sum += endgame_corner_king(board, chess.BLACK, black_material, white_material) * parameters.ENDGAME_KING_PUSH_WEIGHT
 
     evaluation = white_sum - black_sum
     if board.turn == chess.BLACK:
@@ -302,12 +208,24 @@ def guess_move_evaluation(board: chess.Board, move: chess.Move) -> int:
 
 
 def order_moves(
-    board: chess.Board, moves: chess.LegalMoveGenerator
+    board: chess.Board, moves: chess.LegalMoveGenerator, priority_move: chess.Move | None = None
 ) -> list[chess.Move]:
     """
     Returns: sorts a list of moves in place according to guess_move_evaluation
     """
-    return sorted(moves, key=lambda m: guess_move_evaluation(board, m), reverse=True)
+    return sorted(moves, key=lambda m: INF if priority_move == m else guess_move_evaluation(board, m), reverse=True)
+
+
+def calculate_search_extensions(board: chess.Board, move: chess.Move) -> int:
+    extension = 0
+    if board.is_check():
+        extension += 1
+    piece = board.piece_at(move.to_square)
+    rank = chess.square_rank(move.to_square)
+    if piece.piece_type == chess.PAWN and ((piece.color == chess.WHITE and rank == 6) or
+                                           (piece.color == chess.BLACK and rank == 1)):
+        extension += 1
+    return extension
 
 
 def search_all_captures(
@@ -315,6 +233,7 @@ def search_all_captures(
     alpha: float,
     beta: float,
     levels_deep: int = 0,
+    transposition_table: TranspositionTable | None = None,
     search_checks: bool = True,
     use_square_scores: bool = True,
     debug_counts: bool = False,
@@ -326,10 +245,23 @@ def search_all_captures(
         global debug_search_count
         global debug_search_depth
         debug_search_count += 1
-        debug_search_depth = max(debug_search_depth, levels_deep)
+        # debug_search_depth = max(debug_search_depth, levels_deep)
+
+    tuple_representation = None
+    if transposition_table is not None:
+        tuple_representation = get_representation_tuple(board)
+        if tuple_representation in transposition_table:
+            cached_depth, cached_eval, entry_type = transposition_table[tuple_representation]
+            if cached_depth is None and is_entry_applicable(cached_eval, alpha, beta, entry_type):
+                if debug_counts:
+                    global debug_tt_cache_hits
+                    debug_tt_cache_hits += 1
+                return cached_eval, None
 
     evaluation = evaluate(board, use_square_scores=use_square_scores)
     if evaluation >= beta:
+        if transposition_table is not None:
+            transposition_table[tuple_representation] = (None, beta, LOWER_BOUND)
         return beta, None
     alpha = max(alpha, evaluation)
 
@@ -393,10 +325,15 @@ def search_all_captures(
         )[0]
         board.pop()
         if evaluation >= beta:
+            if transposition_table is not None:
+                transposition_table[tuple_representation] = (None, beta, LOWER_BOUND)
             return beta, None
         if evaluation > alpha:  # must not be >=
             alpha = evaluation
             best_move = move
+
+    if transposition_table is not None:
+        transposition_table[tuple_representation] = (None, alpha, UPPER_BOUND if best_move is None else EXACT)
     return alpha, best_move
 
 
@@ -406,11 +343,12 @@ def search(
     alpha: float = -INF,
     beta: float = INF,
     levels_deep: int = 0,
+    total_extensions: int = 0,
     transposition_table: TranspositionTable | None = None,
     _use_transposition_table: bool = False,
-    zobrist_numbers: list[int] | None = None,
-    zobrist_hash: list[tuple[int, str]] = None,
     opening_book: dict[str, dict[str, int]] | None = None,
+    end_time: float | None = None,
+    priority_move: chess.Move | None = None,
     using_opening_book: bool = True,
     use_square_scores: bool = True,
     guess_move_order: bool = True,
@@ -425,10 +363,11 @@ def search(
         alpha: see alpha-beta pruning
         beta: see alpha-beta pruning
         levels_deep: how many levels deep the current function call is
-        transposition_table: a table of already searched positions and their evaluations, using Zobrist hashing
-        zobrist_numbers: random numbers to be used for Zobrist hashing, or none if hashing shouldn't be used
-        zobrist_hash: the current board's zobrist hash, if zobrist_numbers is not None
+        total_extensions: how many levels the search has been extended
+        transposition_table: a table of already searched positions and their evaluations
         opening_book: an opening book
+        end_time: the time to break at
+        priority_move: best move of previous search iteration
         using_opening_book: whether the book is still being used
         use_square_scores: whether to use square scores
         guess_move_order: whether to sort moves according to an initial guess evaluation
@@ -438,14 +377,15 @@ def search(
         _use_transposition_table: whether to use the transposition_table. First search shouldn't
     Returns: the evaluation of the current position, along with the best move if the depth has not been reached
     """
-    zlogger.info(f"{depth} '{board.fen()}' ({zobrist_hash}) {board.move_stack}")
+    if end_time is not None and time.time() > end_time:
+        raise TimeoutError("Out of time!")
+
     if using_opening_book:
         if opening_book is not None:
             fen = board.fen()[:-4]
             if fen in opening_book:
-                opening_moves: dict[str, int] = opening_book[
-                    fen
-                ]  # remove the moves portion
+                # remove the moves portion
+                opening_moves: dict[str, int] = opening_book[fen]
                 move = random.choices(
                     list(opening_moves.keys()), list(opening_moves.values())
                 )[0]
@@ -459,20 +399,23 @@ def search(
         debug_search_count += 1
         debug_search_depth = max(debug_search_depth, levels_deep)
 
-    if zobrist_numbers is not None and _use_transposition_table:
-        if zobrist_hash[-1] in transposition_table:
-            cached_depth, cached_eval, entry_type = transposition_table[zobrist_hash[-1][0]]
-            if depth <= cached_depth and is_entry_applicable(cached_eval, alpha, beta, entry_type):
+    if board.is_game_over():
+        if board.is_checkmate():
+            return -INF + levels_deep, None  # current player has lost
+        else:
+            return 0, None  # game is a draw
+
+    tuple_representation = None
+    if transposition_table is not None and _use_transposition_table:
+        tuple_representation = get_representation_tuple(board)
+        if tuple_representation in transposition_table:
+            cached_depth, cached_eval, entry_type = transposition_table[tuple_representation]
+            if cached_depth is not None and depth <= cached_depth and \
+                    is_entry_applicable(cached_eval, alpha, beta, entry_type):
                 if debug_counts:
                     global debug_tt_cache_hits
                     debug_tt_cache_hits += 1
                 return cached_eval, None
-
-    if board.is_game_over():
-        if board.is_checkmate():
-            return -INF, None  # current player has lost
-        else:
-            return 0, None  # game is a draw
 
     if depth == 0:
         if search_captures:
@@ -481,59 +424,81 @@ def search(
                 alpha,
                 beta,
                 levels_deep=levels_deep,
+                transposition_table=transposition_table,
                 search_checks=search_checks,
                 use_square_scores=use_square_scores,
                 debug_counts=debug_counts,
             )
         else:
             instant_evaluation = evaluate(board, use_square_scores=use_square_scores)
+            if transposition_table is not None:
+                transposition_table[tuple_representation] = (depth, instant_evaluation, EXACT)
             return instant_evaluation, None
 
     moves = board.legal_moves
     if guess_move_order:
-        moves = order_moves(board, moves)
+        moves = order_moves(board, moves, priority_move=priority_move)
     best_move = None
     _debug_move_evals = {}
     for move in moves:
-        updated_hash = zobrist_hash
-        if zobrist_numbers is not None:
-            updated_hash = zobrist_hash[:]
-            updated_hash.append(
-                (update_zobrist_hash(
-                    zobrist_hash[-1][0], board, move, zobrist_numbers
-                ), str(move))
-            )
-            if updated_hash[-1][0] == 16288242624343831739:
-                ...
         board.push(move)
-        evaluation = -search(
-            board,
-            depth - 1,
-            -beta,
-            -alpha,
-            levels_deep=levels_deep + 1,
-            transposition_table=transposition_table,
-            zobrist_numbers=zobrist_numbers,
-            zobrist_hash=updated_hash,
-            opening_book=opening_book,
-            using_opening_book=using_opening_book,
-            use_square_scores=use_square_scores,
-            guess_move_order=guess_move_order,
-            search_captures=search_captures,
-            search_checks=search_checks,
-            debug_counts=debug_counts,
-            _use_transposition_table=True,
-        )[0]
+        try:
+            extension = max(0, min(8 - total_extensions, calculate_search_extensions(board, move)))
+            evaluation = -search(
+                board,
+                depth - 1 + extension,
+                -beta,
+                -alpha,
+                levels_deep=levels_deep + 1,
+                total_extensions=total_extensions + extension,
+                transposition_table=transposition_table,
+                opening_book=opening_book,
+                end_time=end_time,
+                priority_move=priority_move,
+                using_opening_book=using_opening_book,
+                use_square_scores=use_square_scores,
+                guess_move_order=guess_move_order,
+                search_captures=search_captures,
+                search_checks=search_checks,
+                debug_counts=debug_counts,
+                _use_transposition_table=True,
+            )[0]
+        except TimeoutError:
+            board.pop()
+            raise TimeoutError("Ran out of time!")
         board.pop()
         _debug_move_evals[move] = evaluation
         # logging.debug(f"Eval for {move}: {evaluation}")
-        if evaluation >= beta != INF:  # prune the tree
-            transposition_table[zobrist_hash[-1][0]] = (depth, beta, LOWER_BOUND)
+        if evaluation >= beta != INF and transposition_table is not None:  # prune the tree
+            transposition_table[tuple_representation] = (depth, beta, LOWER_BOUND)
             return beta, None
         if evaluation > alpha or evaluation == -INF:
             alpha = evaluation
             best_move = move
 
-    if zobrist_numbers is not None:
-        transposition_table[zobrist_hash[-1][0]] = (depth, alpha, UPPER_BOUND if best_move is None else EXACT)
+    if transposition_table is not None:
+        transposition_table[tuple_representation] = (depth, alpha, UPPER_BOUND if best_move is None else EXACT)
     return alpha, best_move
+
+
+def iterative_deepening_search(board: chess.Board, search_time: float,
+                               transposition_table: TranspositionTable | None = None,
+                               opening_book: dict[str, dict[str, int]] | None = None,
+                               debug_counts: bool = False) -> tuple[float, chess.Move | None]:
+    end_time = time.time() + search_time
+    best_eval, best_move = -INF, None
+    try:
+        iterative_depth = 1
+        while True:
+            best_eval, best_move = search(board, iterative_depth, transposition_table=transposition_table,
+                                          opening_book=opening_book, end_time=end_time, priority_move=best_move,
+                                          debug_counts=debug_counts)
+            if debug_counts and debug_search_count == 0:
+                raise TimeoutError
+            iterative_depth += 1
+    except TimeoutError as _:
+        pass
+    if best_move is None:
+        best_eval, best_move = search(board, depth=1, transposition_table=transposition_table,
+                                      opening_book=opening_book, debug_counts=debug_counts)
+    return best_eval, best_move

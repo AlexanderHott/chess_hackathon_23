@@ -107,7 +107,7 @@ def test_check_all_captures():
 
 
 def test_endgame_skill():
-    grob = bot.Bot(depth=4)
+    grob = bot.Bot(time_per_turn=0.2)
     wins, draws, losses = play_two_bots(
         grob, RandomBot(), 1, fen="8/8/4R3/5K2/8/2k5/8/8 w - - 0 1"
     )
@@ -157,15 +157,8 @@ def test_positional_piece_bonus():
     assert good_bonus > bad_bonus
 
 
-def test_strange_zobrist():
-    board = chess.Board("r1bq1rk1/ppp1ppbp/2np1np1/8/3P1B2/4PN1P/PPP1BPP1/RN1Q1RK1 b - - 2 7")
-    numbers = evaluator.generate_zobrist_numbers()
-    zhash = evaluator.get_zobrist_hash(board, numbers)
-    moves = ["f6d7", "b1c3", "e7e5"]
-    # moves = ["f6d7", "b1c3", "e7e5", "f4g5", "g7f6", "c3e4", "f6g7"]
-    print()
-    for move in moves:
-        print(zhash)
-        zhash = evaluator.update_zobrist_hash(zhash, board, board.parse_san(move), numbers)
-        board.push_san(move)
-    print(zhash)
+def test_checkmate_position_glitch():
+    board = chess.Board(fen="8/4k3/8/3QK3/8/7P/8/8 w - - 5 95")
+    tt = evaluator.TranspositionTable(max_size=1_000_000)
+    test_eval, test_move = evaluator.search(board, 7, transposition_table=tt)
+    assert test_eval == evaluator.INF
