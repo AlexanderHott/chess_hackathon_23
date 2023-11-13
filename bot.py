@@ -64,7 +64,7 @@ class Bot:
                 break
             except FileNotFoundError:
                 continue
-        self.transposition_table = evaluator.TranspositionTable(max_size=1_000_000)
+        self.transposition_table = evaluator.TranspositionTable(max_size=3_000_000)
 
     def check_move_is_legal(self, initial_position, new_position) -> bool:
         """
