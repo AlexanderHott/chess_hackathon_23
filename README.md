@@ -1,3 +1,5 @@
+# Better Code Structure https://github.com/AlexanderHott/chess_hackathon_23/tree/main
+
 # The Legendary Grob Bot
 
 ## Features
