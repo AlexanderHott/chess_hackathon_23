@@ -216,6 +216,18 @@ def order_moves(
     return sorted(moves, key=lambda m: INF if priority_move == m else guess_move_evaluation(board, m), reverse=True)
 
 
+def calculate_search_extensions(board: chess.Board, move: chess.Move) -> int:
+    extension = 0
+    if board.is_check():
+        extension += 1
+    piece = board.piece_at(move.to_square)
+    rank = chess.square_rank(move.to_square)
+    if piece.piece_type == chess.PAWN and ((piece.color == chess.WHITE and rank == 6) or
+                                           (piece.color == chess.BLACK and rank == 1)):
+        extension += 1
+    return extension
+
+
 def search_all_captures(
     board: chess.Board,
     alpha: float,
@@ -331,6 +343,7 @@ def search(
     alpha: float = -INF,
     beta: float = INF,
     levels_deep: int = 0,
+    total_extensions: int = 0,
     transposition_table: TranspositionTable | None = None,
     _use_transposition_table: bool = False,
     opening_book: dict[str, dict[str, int]] | None = None,
@@ -350,6 +363,7 @@ def search(
         alpha: see alpha-beta pruning
         beta: see alpha-beta pruning
         levels_deep: how many levels deep the current function call is
+        total_extensions: how many levels the search has been extended
         transposition_table: a table of already searched positions and their evaluations
         opening_book: an opening book
         end_time: the time to break at
@@ -429,12 +443,14 @@ def search(
     for move in moves:
         board.push(move)
         try:
+            extension = max(0, min(8 - total_extensions, calculate_search_extensions(board, move)))
             evaluation = -search(
                 board,
-                depth - 1,
+                depth - 1 + extension,
                 -beta,
                 -alpha,
                 levels_deep=levels_deep + 1,
+                total_extensions=total_extensions + extension,
                 transposition_table=transposition_table,
                 opening_book=opening_book,
                 end_time=end_time,
