@@ -1,3 +1,5 @@
+# Submission https://github.com/AlexanderHott/chess_hackathon_23/tree/submission
+
 # The Legendary Grob Bot
 
 The bot is made up of two major components: board evaluation and move searching.
