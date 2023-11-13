@@ -23,15 +23,15 @@ The bot is made up of two major components: board evaluation and move searching.
 >
 > [Chess Programming Wiki](https://www.chessprogramming.org/Alpha-Beta)
 
-### Iterative Deepending
+### Positional Piece Bonuses
 
-> Iterative deepening (ID) has been adopted as the basic time management
-> strategy in depth-first searches, but has proved surprisingly beneficial as
-> far as move ordering is concerned in alpha-beta and its enhancements. It has
-> been noticed, that even if one is about to search to a given depth, that
-> iterative deepening is faster than searching for the given depth immediately
+> Piece-Square Tables, a simple way to assign values to specific pieces on
+> specific squares. A table is created for each piece of each color, and values
+> assigned to each square. This scheme is fast, since the evaluation term from
+> the piece square tables can be incrementally updated as moves are made and
+> unmade in the search tree.
 >
-> [Chess Programming Wiki](https://www.chessprogramming.org/Iterative_Deepening)
+> [Chess Programming Wiki](https://www.chessprogramming.org/Piece-Square_Tables)
 
 ### Move Ordering
 
@@ -56,6 +56,16 @@ The bot is made up of two major components: board evaluation and move searching.
 >
 > [Chess Programming Wiki](https://www.chessprogramming.org/Quiescence_Search)
 
+### Iterative Deepending
+
+> Iterative deepening (ID) has been adopted as the basic time management
+> strategy in depth-first searches, but has proved surprisingly beneficial as
+> far as move ordering is concerned in alpha-beta and its enhancements. It has
+> been noticed, that even if one is about to search to a given depth, that
+> iterative deepening is faster than searching for the given depth immediately
+>
+> [Chess Programming Wiki](https://www.chessprogramming.org/Iterative_Deepening)
+
 ### Transposition Tables
 
 > A Transposition Table is a database that stores results of previously
@@ -63,16 +73,6 @@ The bot is made up of two major components: board evaluation and move searching.
 > tree with little negative impact.
 >
 > [Chess Programming Wiki](https://www.chessprogramming.org/Transposition_Table)
-
-### Positional Piece Bonuses
-
-> Piece-Square Tables, a simple way to assign values to specific pieces on
-> specific squares. A table is created for each piece of each color, and values
-> assigned to each square. This scheme is fast, since the evaluation term from
-> the piece square tables can be incrementally updated as moves are made and
-> unmade in the search tree.
->
-> [Chess Programming Wiki](https://www.chessprogramming.org/Piece-Square_Tables)
 
 ### Smart Endgame Evaluation
 
