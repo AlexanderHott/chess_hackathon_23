@@ -86,7 +86,7 @@ respond with `2. Ke2 Ke7 3. Ke1 Ke8`.
 - Zobrist hashing
 - Pawn Structure
 - Partial Move ordering
-- Bishop Pair / choosing the correct bishp color
+- Bishop Pair / choosing the correct bishop color
 - Optimizing code to run faster
 
 ## Quickstart
