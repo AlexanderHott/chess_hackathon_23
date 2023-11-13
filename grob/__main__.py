@@ -6,10 +6,10 @@ from grob import evaluator
 from tests.random_bot import RandomBot
 
 if __name__ == "__main__":
-    grob_bot = Bot(fen="r1bq1rk1/ppp1ppbp/2np1np1/8/3P1B2/4PN1P/PPP1BPP1/RN1Q1RK1 b - - 2 7", depth=3, debug=True)
-    #grob_bot.zobrist_numbers = None
-    grob2 = Bot(depth=3, debug=True)
-    #grob2.zobrist_numbers = None
+    grob_bot = Bot(fen="8/4k3/8/3QK3/8/7P/8/8 w - - 5 95", time_per_turn=5, debug=True)
+    #grob_bot.transposition_table = None
+    grob2 = Bot(time_per_turn=1, debug=True)
+    #grob2.transposition_table = None
 
     grob2.board = grob_bot.board
 

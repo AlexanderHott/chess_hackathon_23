@@ -12,10 +12,11 @@ from grob import parameters
 from grob.parameters import (
     WHITE_PIECE_SQUARE_TABLES,
     BLACK_PIECE_SQUARE_TABLES,
-    PIECE_VALUES,
+    PIECE_VALUES, ENDGAME_WHITE_PIECE_SQUARE_TABLES, ENDGAME_BLACK_PIECE_SQUARE_TABLES,
 )
 
-INF = float("inf")
+# INF = float("inf")
+INF = 99_999_999
 
 TableEntryType = int
 TABLE_ENTRY_TYPE = [EXACT, LOWER_BOUND, UPPER_BOUND] = range(3)
@@ -95,12 +96,12 @@ def material_score(board: chess.Board, color: chess.Color) -> int:
 
 
 def get_piece_square_bonus(
-    square: chess.Square, piece: chess.PieceType, color: chess.Color
+    square: chess.Square, piece: chess.PieceType, color: chess.Color, endgame: bool = False
 ) -> int:
     if color == chess.WHITE:
-        return WHITE_PIECE_SQUARE_TABLES[piece][square]
+        return ENDGAME_WHITE_PIECE_SQUARE_TABLES[piece][square] if endgame else WHITE_PIECE_SQUARE_TABLES[piece][square]
     else:
-        return BLACK_PIECE_SQUARE_TABLES[piece][square]
+        return ENDGAME_BLACK_PIECE_SQUARE_TABLES[piece][square] if endgame else BLACK_PIECE_SQUARE_TABLES[piece][square]
 
 
 def get_square_scores(board: chess.Board, color: chess.Color) -> int:
@@ -111,7 +112,12 @@ def get_square_scores(board: chess.Board, color: chess.Color) -> int:
     for piece_type in chess.PIECE_TYPES:
         # is there a more efficient way of doing this using the bit mask directly?
         for square in board.pieces(piece_type, color):
-            total_square_bonus += get_piece_square_bonus(square, piece_type, color)
+            if piece_type == chess.KING:
+                endgame_weight = (32 - board.occupied.bit_count()) * parameters.ENDGAME_WEIGHT_CONTROL
+                total_square_bonus += (1 - endgame_weight) * get_piece_square_bonus(square, piece_type, color) + \
+                    endgame_weight * get_piece_square_bonus(square, piece_type, color, endgame=True)
+            else:
+                total_square_bonus += get_piece_square_bonus(square, piece_type, color)
     return total_square_bonus
 
 
@@ -164,8 +170,8 @@ def evaluate(board: chess.Board, use_square_scores: bool = True) -> float:
         white_sum += get_square_scores(board, chess.WHITE) * parameters.SQUARE_SCORE_WEIGHT
         black_sum += get_square_scores(board, chess.BLACK) * parameters.SQUARE_SCORE_WEIGHT
 
-    white_sum += endgame_corner_king(board, chess.WHITE, white_material, black_material)
-    black_sum += endgame_corner_king(board, chess.BLACK, black_material, white_material)
+    white_sum += endgame_corner_king(board, chess.WHITE, white_material, black_material) * parameters.ENDGAME_KING_PUSH_WEIGHT
+    black_sum += endgame_corner_king(board, chess.BLACK, black_material, white_material) * parameters.ENDGAME_KING_PUSH_WEIGHT
 
     evaluation = white_sum - black_sum
     if board.turn == chess.BLACK:
@@ -381,7 +387,7 @@ def search(
 
     if board.is_game_over():
         if board.is_checkmate():
-            return -INF, None  # current player has lost
+            return -INF + levels_deep, None  # current player has lost
         else:
             return 0, None  # game is a draw
 
@@ -471,6 +477,8 @@ def iterative_deepening_search(board: chess.Board, search_time: float,
             best_eval, best_move = search(board, iterative_depth, transposition_table=transposition_table,
                                           opening_book=opening_book, end_time=end_time, priority_move=best_move,
                                           debug_counts=debug_counts)
+            if debug_counts and debug_search_count == 0:
+                raise TimeoutError
             iterative_depth += 1
     except TimeoutError as _:
         pass
