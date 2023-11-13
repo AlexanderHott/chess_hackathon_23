@@ -107,7 +107,7 @@ def test_check_all_captures():
 
 
 def test_endgame_skill():
-    grob = bot.Bot(depth=4)
+    grob = bot.Bot(time_per_turn=0.2)
     wins, draws, losses = play_two_bots(
         grob, RandomBot(), 1, fen="8/8/4R3/5K2/8/2k5/8/8 w - - 0 1"
     )
@@ -155,3 +155,10 @@ def test_positional_piece_bonus():
     good_bonus = evaluator.get_square_scores(board, chess.WHITE)
 
     assert good_bonus > bad_bonus
+
+
+def test_checkmate_position_glitch():
+    board = chess.Board(fen="8/4k3/8/3QK3/8/7P/8/8 w - - 5 95")
+    tt = evaluator.TranspositionTable(max_size=1_000_000)
+    test_eval, test_move = evaluator.search(board, 7, transposition_table=tt)
+    assert test_eval == evaluator.INF
