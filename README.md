@@ -21,7 +21,17 @@ The bot is made up of two major components: board evaluation and move searching.
 >
 > [Chess Programming Wiki](https://www.chessprogramming.org/Alpha-Beta)
 
-### Move ordering
+### Iterative Deepending
+
+> Iterative deepening (ID) has been adopted as the basic time management
+> strategy in depth-first searches, but has proved surprisingly beneficial as
+> far as move ordering is concerned in alpha-beta and its enhancements. It has
+> been noticed, that even if one is about to search to a given depth, that
+> iterative deepening is faster than searching for the given depth immediately
+>
+> [Chess Programming Wiki](https://www.chessprogramming.org/Iterative_Deepening)
+
+### Move Ordering
 
 > For the alpha-beta algorithm to perform well, the best moves need to be
 > searched first, so we guess an approximate evaluation of a move and sort the
@@ -29,7 +39,7 @@ The bot is made up of two major components: board evaluation and move searching.
 >
 > [Chess Programming Wiki](https://www.chessprogramming.org/Move_Ordering)
 
-### "Quiescence" search
+### "Quiescence" Search
 
 > Most chess programs, at the end of the main search perform a more limited
 > quiescence search, containing fewer moves. The purpose of this search is to
@@ -71,7 +81,7 @@ To win at endgames, our bot prioritizes two things in the endgame:
 
 This is because most checkmates with few pieces happen on the edge of the board.
 
-### Opening book (includes Bongcloud Rapid Response Technology™)
+### Opening Book (includes Bongcloud Rapid Response Technology™)
 
 We store a small sample of grandmaster games and if there is a response to an
 opening move we do it blindly.
