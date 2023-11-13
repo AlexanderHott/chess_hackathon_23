@@ -112,7 +112,7 @@ def get_square_scores(board: chess.Board, color: chess.Color) -> int:
     for piece_type in chess.PIECE_TYPES:
         # is there a more efficient way of doing this using the bit mask directly?
         for square in board.pieces(piece_type, color):
-            if piece_type == chess.KING:
+            if piece_type == chess.KING or piece_type == chess.PAWN:
                 endgame_weight = (32 - board.occupied.bit_count()) * parameters.ENDGAME_WEIGHT_CONTROL
                 total_square_bonus += (1 - endgame_weight) * get_piece_square_bonus(square, piece_type, color) + \
                     endgame_weight * get_piece_square_bonus(square, piece_type, color, endgame=True)
